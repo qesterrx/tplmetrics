@@ -14,8 +14,7 @@ func TestUpdateMetric(t *testing.T) {
 
 	storage := repository.NewMemStorage()
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/update/{kind}/{name}/{value}", UpdateMetric(storage))
+	router := GetRouter(storage)
 
 	tests := []struct {
 		name        string
@@ -50,7 +49,7 @@ func TestUpdateMetric(t *testing.T) {
 			url:         "/update/gauge/g1/1",
 			method:      http.MethodGet,
 			contentType: "text/plain",
-			statusCode:  http.StatusBadRequest,
+			statusCode:  http.StatusMethodNotAllowed,
 		},
 		{
 			name:        "WrongKind", //А не нужно ли выносить эту логику в memtorage?
@@ -67,7 +66,7 @@ func TestUpdateMetric(t *testing.T) {
 			r := httptest.NewRequest(test.method, test.url, nil)
 			r.Header.Set("Content-Type", test.contentType)
 
-			mux.ServeHTTP(w, r)
+			router.ServeHTTP(w, r)
 
 			assert.Equal(t, test.statusCode, w.Code, fmt.Sprintf("StatusCode in response different: want %d got %d", test.statusCode, w.Code))
 		})
