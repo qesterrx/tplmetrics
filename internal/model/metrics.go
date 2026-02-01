@@ -47,7 +47,7 @@ func NewCounterMetrica(name string, value int64) *Metrica {
 func (m *Metrica) GetMetricaValue() string {
 	switch m.Kind {
 	case Gauge:
-		return fmt.Sprintf("%f", m.Value)
+		return fmt.Sprintf("%.3f", m.Value)
 	case Counter:
 		return fmt.Sprintf("%d", m.Value)
 	default:

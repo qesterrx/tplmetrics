@@ -86,11 +86,11 @@ func UpdateMetric(storage repository.Repository) http.HandlerFunc {
 			return
 		}
 
-		if r.Header.Get("Content-Type") != "text/plain" {
+		/*	if r.Header.Get("Content-Type") != "text/plain" {
 			fmt.Printf("UpdateMetric, wrong content-type, got %s \n", r.Header.Get("Content-Type"))
 			w.WriteHeader(http.StatusBadRequest)
 			return
-		}
+		}*/
 
 		kindSrc := strings.ToLower(chi.URLParam(r, "kind"))
 		kind, err := model.GetKindValue(kindSrc)

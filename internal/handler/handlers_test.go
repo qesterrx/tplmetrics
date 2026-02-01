@@ -37,13 +37,13 @@ func TestUpdateMetric(t *testing.T) {
 			contentType: "text/plain",
 			statusCode:  http.StatusOK,
 		},
-		{
+		/*	{
 			name:        "WrongContentType",
 			url:         "/update/gauge/g1/1",
 			method:      http.MethodPost,
 			contentType: "json/application",
 			statusCode:  http.StatusBadRequest,
-		},
+		},*/
 		{
 			name:        "WrongMethod",
 			url:         "/update/gauge/g1/1",
