@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
 
@@ -24,7 +25,7 @@ func UpdateMetric(storage repository.Repository) http.HandlerFunc {
 		}
 
 		kindSrc := strings.ToLower(r.PathValue("kind"))
-		kind, err := repository.GetKindValue(kindSrc)
+		kind, err := model.GetKindValue(kindSrc)
 
 		if err != nil {
 			fmt.Printf("UpdateMetric, error kind, got %s \n", kindSrc)

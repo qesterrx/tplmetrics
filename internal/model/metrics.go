@@ -1,19 +1,57 @@
-package models
+package model
 
-const (
-	Counter = "counter"
-	Gauge   = "gauge"
+import (
+	"fmt"
 )
 
-// NOTE: Не усложняем пример, вводя иерархическую вложенность структур.
-// Органичиваясь плоской моделью.
-// Delta и Value объявлены через указатели,
-// что бы отличать значение "0", от не заданного значения
-// и соответственно не кодировать в структуру.
-type Metrics struct {
-	ID    string   `json:"id"`
-	MType string   `json:"type"`
-	Delta *int64   `json:"delta,omitempty"`
-	Value *float64 `json:"value,omitempty"`
-	Hash  string   `json:"hash,omitempty"`
+type KindValue string
+
+const (
+	Gauge   KindValue = "gauge"
+	Counter KindValue = "counter"
+)
+
+type Metrica struct {
+	Name  string
+	Kind  KindValue
+	Value any
+}
+
+func GetKindValue(kind string) (KindValue, error) {
+	switch kind {
+	case "gauge":
+		return Gauge, nil
+	case "counter":
+		return Counter, nil
+	default:
+		return "", fmt.Errorf("unknown type metric, got %s", kind)
+	}
+}
+
+func NewGaugeMetrica(name string, value float64) Metrica {
+	return Metrica{
+		Name:  name,
+		Kind:  Gauge,
+		Value: value,
+	}
+}
+
+func NewCounterMetrica(name string, value int64) Metrica {
+	return Metrica{
+		Name:  name,
+		Kind:  Counter,
+		Value: value,
+	}
+}
+
+func (m *Metrica) GetMetricaValue() (string, error) {
+	switch m.Kind {
+	case Gauge:
+		return fmt.Sprintf("%f", m.Value), nil
+	case Counter:
+		return fmt.Sprintf("%d", m.Value), nil
+	default:
+		return "", fmt.Errorf("unimplemented type metric, got %s", m.Kind)
+	}
+
 }

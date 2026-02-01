@@ -3,6 +3,8 @@ package repository
 import (
 	"fmt"
 	"strconv"
+
+	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
 type MemStorage struct {
@@ -19,7 +21,7 @@ func NewMemStorage() *MemStorage {
 	return &mm
 }
 
-func (m *MemStorage) UpdateMetric(kind KindValue, name string, value string) error {
+func (m *MemStorage) UpdateMetric(kind model.KindValue, name string, value string) error {
 
 	//А не будет ли это слабым местом, все таки при каждом сохранении будем два раза искать в мапе?
 	skind, _, err := m.GetMetric(name)
@@ -28,7 +30,7 @@ func (m *MemStorage) UpdateMetric(kind KindValue, name string, value string) err
 		return fmt.Errorf("metric %s have already registred as %s", name, skind)
 	}
 
-	if kind == Gauge {
+	if kind == model.Gauge {
 
 		val, err := strconv.ParseFloat(value, 64)
 
@@ -39,7 +41,7 @@ func (m *MemStorage) UpdateMetric(kind KindValue, name string, value string) err
 		m.gauge[name] = val
 		return nil
 
-	} else if kind == Counter {
+	} else if kind == model.Counter {
 
 		val, err := strconv.ParseInt(value, 10, 64)
 
@@ -55,18 +57,18 @@ func (m *MemStorage) UpdateMetric(kind KindValue, name string, value string) err
 	}
 }
 
-func (m *MemStorage) GetMetric(name string) (KindValue, string, error) {
+func (m *MemStorage) GetMetric(name string) (model.KindValue, string, error) {
 
 	valueG, ok := m.gauge[name]
 
 	if ok {
-		return Gauge, fmt.Sprintf("%5.5f", valueG), nil
+		return model.Gauge, fmt.Sprintf("%f", valueG), nil
 	}
 
 	valueC, ok := m.counter[name]
 
 	if ok {
-		return Counter, fmt.Sprintf("%d", valueC), nil
+		return model.Counter, fmt.Sprintf("%d", valueC), nil
 	}
 
 	return "", "", fmt.Errorf("metric %s not found", name)
