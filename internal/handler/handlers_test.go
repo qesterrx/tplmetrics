@@ -12,7 +12,8 @@ import (
 
 func TestUpdateMetric(t *testing.T) {
 
-	//host := "localhost:8080"
+	mux := http.NewServeMux()
+	mux.HandleFunc("/update/{kind}/{name}/{value}", UpdateMetric(repository.NewMemStorage()))
 
 	tests := []struct {
 		name        string
@@ -58,15 +59,13 @@ func TestUpdateMetric(t *testing.T) {
 		},
 	}
 
-	handler := UpdateMetric(repository.NewMemStorage())
-
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			w := httptest.NewRecorder()
 			r := httptest.NewRequest(test.method, test.url, nil)
 			r.Header.Set("Content-Type", test.contentType)
 
-			handler(w, r)
+			mux.ServeHTTP(w, r)
 
 			assert.Equal(t, test.statusCode, w.Code, fmt.Sprintf("StatusCode in response different: want %d got %d", test.statusCode, w.Code))
 		})
