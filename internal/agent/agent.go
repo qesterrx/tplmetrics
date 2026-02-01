@@ -39,36 +39,36 @@ func MetricCollector(queue chan<- model.Metrica, pollInterval int) {
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
 
-		queue <- model.NewGaugeMetrica("Alloc", float64(m.Alloc))
-		queue <- model.NewGaugeMetrica("BuckHashSys", float64(m.BuckHashSys))
-		queue <- model.NewGaugeMetrica("Frees", float64(m.Frees))
-		queue <- model.NewGaugeMetrica("GCCPUFraction", float64(m.GCCPUFraction))
-		queue <- model.NewGaugeMetrica("GCSys", float64(m.GCSys))
-		queue <- model.NewGaugeMetrica("HeapAlloc", float64(m.HeapAlloc))
-		queue <- model.NewGaugeMetrica("HeapIdle", float64(m.HeapIdle))
-		queue <- model.NewGaugeMetrica("HeapInuse", float64(m.HeapInuse))
-		queue <- model.NewGaugeMetrica("HeapObjects", float64(m.HeapObjects))
-		queue <- model.NewGaugeMetrica("HeapReleased", float64(m.HeapReleased))
-		queue <- model.NewGaugeMetrica("HeapSys", float64(m.HeapSys))
-		queue <- model.NewGaugeMetrica("LastGC", float64(m.LastGC))
-		queue <- model.NewGaugeMetrica("Lookups", float64(m.Lookups))
-		queue <- model.NewGaugeMetrica("MCacheInuse", float64(m.MCacheInuse))
-		queue <- model.NewGaugeMetrica("MCacheSys", float64(m.MCacheSys))
-		queue <- model.NewGaugeMetrica("MSpanInuse", float64(m.MSpanInuse))
-		queue <- model.NewGaugeMetrica("MSpanSys", float64(m.MSpanSys))
-		queue <- model.NewGaugeMetrica("Mallocs", float64(m.Mallocs))
-		queue <- model.NewGaugeMetrica("NextGC", float64(m.NextGC))
-		queue <- model.NewGaugeMetrica("NumForcedGC", float64(m.NumForcedGC))
-		queue <- model.NewGaugeMetrica("NumGC", float64(m.NumGC))
-		queue <- model.NewGaugeMetrica("OtherSys", float64(m.OtherSys))
-		queue <- model.NewGaugeMetrica("PauseTotalNs", float64(m.PauseTotalNs))
-		queue <- model.NewGaugeMetrica("StackInuse", float64(m.StackInuse))
-		queue <- model.NewGaugeMetrica("StackSys", float64(m.StackSys))
-		queue <- model.NewGaugeMetrica("Sys", float64(m.Sys))
-		queue <- model.NewGaugeMetrica("TotalAlloc", float64(m.TotalAlloc))
+		queue <- *model.NewGaugeMetrica("Alloc", float64(m.Alloc))
+		queue <- *model.NewGaugeMetrica("BuckHashSys", float64(m.BuckHashSys))
+		queue <- *model.NewGaugeMetrica("Frees", float64(m.Frees))
+		queue <- *model.NewGaugeMetrica("GCCPUFraction", float64(m.GCCPUFraction))
+		queue <- *model.NewGaugeMetrica("GCSys", float64(m.GCSys))
+		queue <- *model.NewGaugeMetrica("HeapAlloc", float64(m.HeapAlloc))
+		queue <- *model.NewGaugeMetrica("HeapIdle", float64(m.HeapIdle))
+		queue <- *model.NewGaugeMetrica("HeapInuse", float64(m.HeapInuse))
+		queue <- *model.NewGaugeMetrica("HeapObjects", float64(m.HeapObjects))
+		queue <- *model.NewGaugeMetrica("HeapReleased", float64(m.HeapReleased))
+		queue <- *model.NewGaugeMetrica("HeapSys", float64(m.HeapSys))
+		queue <- *model.NewGaugeMetrica("LastGC", float64(m.LastGC))
+		queue <- *model.NewGaugeMetrica("Lookups", float64(m.Lookups))
+		queue <- *model.NewGaugeMetrica("MCacheInuse", float64(m.MCacheInuse))
+		queue <- *model.NewGaugeMetrica("MCacheSys", float64(m.MCacheSys))
+		queue <- *model.NewGaugeMetrica("MSpanInuse", float64(m.MSpanInuse))
+		queue <- *model.NewGaugeMetrica("MSpanSys", float64(m.MSpanSys))
+		queue <- *model.NewGaugeMetrica("Mallocs", float64(m.Mallocs))
+		queue <- *model.NewGaugeMetrica("NextGC", float64(m.NextGC))
+		queue <- *model.NewGaugeMetrica("NumForcedGC", float64(m.NumForcedGC))
+		queue <- *model.NewGaugeMetrica("NumGC", float64(m.NumGC))
+		queue <- *model.NewGaugeMetrica("OtherSys", float64(m.OtherSys))
+		queue <- *model.NewGaugeMetrica("PauseTotalNs", float64(m.PauseTotalNs))
+		queue <- *model.NewGaugeMetrica("StackInuse", float64(m.StackInuse))
+		queue <- *model.NewGaugeMetrica("StackSys", float64(m.StackSys))
+		queue <- *model.NewGaugeMetrica("Sys", float64(m.Sys))
+		queue <- *model.NewGaugeMetrica("TotalAlloc", float64(m.TotalAlloc))
 
-		queue <- model.NewGaugeMetrica("RandomValue", float64(rand.ExpFloat64()))
-		queue <- model.NewCounterMetrica("PollCount", 1)
+		queue <- *model.NewGaugeMetrica("RandomValue", float64(rand.ExpFloat64()))
+		queue <- *model.NewCounterMetrica("PollCount", 1)
 
 		counter++
 		fmt.Printf("MetricCollector Counter = %d, len chan =%d\n", counter, len(queue))
@@ -86,14 +86,7 @@ func Sender(queue <-chan model.Metrica, reportInterval int, host string) {
 		select {
 		case metrica := <-queue:
 			//fmt.Printf("Reader: получил %v\n", metrica)
-			value, err := metrica.GetMetricaValue()
-
-			if err != nil {
-				fmt.Printf("METRICA get value error = %e\n", err)
-				continue
-			}
-
-			url := fmt.Sprintf("%s/update/%s/%s/%s", host, metrica.Kind, metrica.Name, value)
+			url := fmt.Sprintf("%s/update/%s/%s/%s", host, metrica.Kind, metrica.Name, metrica.GetMetricaValue())
 			resp, err := client.R().
 				SetHeader("Content-Type", "text/plain").
 				Post(url)

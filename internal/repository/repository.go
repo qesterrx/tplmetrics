@@ -5,7 +5,8 @@ import (
 )
 
 type Repository interface {
-	UpdateMetric(kind model.KindValue, name string, value string) error
-	GetMetric(name string) (model.KindValue, string, error)
-	Show()
+	UpdateMetric(metrica *model.Metrica) error
+	GetMetric(name string) (*model.Metrica, error)
+	GetAllMetric() *[]model.Metrica
+	ShowAllMetric()
 }

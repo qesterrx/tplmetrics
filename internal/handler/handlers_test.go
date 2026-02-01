@@ -12,8 +12,10 @@ import (
 
 func TestUpdateMetric(t *testing.T) {
 
+	storage := repository.NewMemStorage()
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/update/{kind}/{name}/{value}", UpdateMetric(repository.NewMemStorage()))
+	mux.HandleFunc("/update/{kind}/{name}/{value}", UpdateMetric(storage))
 
 	tests := []struct {
 		name        string

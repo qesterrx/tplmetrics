@@ -12,9 +12,9 @@ const (
 )
 
 type Metrica struct {
-	Name  string
-	Kind  KindValue
-	Value any
+	Name  string    `json:"name"`
+	Kind  KindValue `json:"kind"`
+	Value any       `json:"value"`
 }
 
 func GetKindValue(kind string) (KindValue, error) {
@@ -28,30 +28,30 @@ func GetKindValue(kind string) (KindValue, error) {
 	}
 }
 
-func NewGaugeMetrica(name string, value float64) Metrica {
-	return Metrica{
+func NewGaugeMetrica(name string, value float64) *Metrica {
+	return &Metrica{
 		Name:  name,
 		Kind:  Gauge,
 		Value: value,
 	}
 }
 
-func NewCounterMetrica(name string, value int64) Metrica {
-	return Metrica{
+func NewCounterMetrica(name string, value int64) *Metrica {
+	return &Metrica{
 		Name:  name,
 		Kind:  Counter,
 		Value: value,
 	}
 }
 
-func (m *Metrica) GetMetricaValue() (string, error) {
+func (m *Metrica) GetMetricaValue() string {
 	switch m.Kind {
 	case Gauge:
-		return fmt.Sprintf("%f", m.Value), nil
+		return fmt.Sprintf("%f", m.Value)
 	case Counter:
-		return fmt.Sprintf("%d", m.Value), nil
+		return fmt.Sprintf("%d", m.Value)
 	default:
-		return "", fmt.Errorf("unimplemented type metric, got %s", m.Kind)
+		return fmt.Sprintf("%v", m.Value)
 	}
 
 }

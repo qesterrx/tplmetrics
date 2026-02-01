@@ -18,9 +18,5 @@ func main() {
 func run() error {
 	storage := repository.NewMemStorage()
 
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/update/{kind}/{name}/{value}", handler.UpdateMetric(storage))
-
-	return http.ListenAndServe("localhost:8080", mux)
+	return http.ListenAndServe("localhost:8080", handler.GetRouter(storage))
 }

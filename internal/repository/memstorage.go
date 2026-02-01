@@ -21,67 +21,104 @@ func NewMemStorage() *MemStorage {
 	return &mm
 }
 
-func (m *MemStorage) UpdateMetric(kind model.KindValue, name string, value string) error {
+func (ms *MemStorage) UpdateMetric(metrica *model.Metrica) error {
 
 	//А не будет ли это слабым местом, все таки при каждом сохранении будем два раза искать в мапе?
-	skind, _, err := m.GetMetric(name)
+	savedMetrica, err := ms.GetMetric(metrica.Name)
 
-	if err == nil && skind != kind {
-		return fmt.Errorf("metric %s have already registred as %s", name, skind)
+	if err == nil && savedMetrica.Kind != metrica.Kind {
+		return fmt.Errorf("metric %s have already registred as %s", metrica.Name, savedMetrica.Kind)
 	}
 
-	if kind == model.Gauge {
+	if metrica.Kind == model.Gauge {
 
-		val, err := strconv.ParseFloat(value, 64)
+		valStr := fmt.Sprintf("%v", metrica.Value)
+		val, err := strconv.ParseFloat(valStr, 64)
 
 		if err != nil {
-			return fmt.Errorf("type of value for Gauge metric is wrong (expected float64), got value %s", value)
+			fmt.Println(err)
+			return fmt.Errorf("type of value for Gauge metric is wrong (expected float64), got value %s", metrica.Value)
 		}
 
-		m.gauge[name] = val
+		ms.gauge[metrica.Name] = val
 		return nil
 
-	} else if kind == model.Counter {
+	} else if metrica.Kind == model.Counter {
 
-		val, err := strconv.ParseInt(value, 10, 64)
+		valStr := fmt.Sprintf("%v", metrica.Value)
+		val, err := strconv.ParseInt(valStr, 10, 64)
 
 		if err != nil {
-			return fmt.Errorf("type of value for Counter metric is wrong (expected int64), got value %s", value)
+			fmt.Println(err)
+			return fmt.Errorf("type of value for Counter metric is wrong (expected int64), got value %s", metrica.Value)
 		}
 
-		m.counter[name] = m.counter[name] + val
+		ms.counter[metrica.Name] = ms.counter[metrica.Name] + val
 		return nil
 
 	} else {
-		return fmt.Errorf("unimplemented type %s", kind)
+		return fmt.Errorf("unimplemented type %s", metrica.Kind)
 	}
 }
 
-func (m *MemStorage) GetMetric(name string) (model.KindValue, string, error) {
+func (ms *MemStorage) GetMetric(name string) (*model.Metrica, error) {
 
-	valueG, ok := m.gauge[name]
-
-	if ok {
-		return model.Gauge, fmt.Sprintf("%f", valueG), nil
-	}
-
-	valueC, ok := m.counter[name]
+	valueG, ok := ms.gauge[name]
 
 	if ok {
-		return model.Counter, fmt.Sprintf("%d", valueC), nil
+		return &model.Metrica{
+			Name:  name,
+			Kind:  model.Gauge,
+			Value: valueG,
+		}, nil
 	}
 
-	return "", "", fmt.Errorf("metric %s not found", name)
+	valueC, ok := ms.counter[name]
+
+	if ok {
+		return &model.Metrica{
+			Name:  name,
+			Kind:  model.Counter,
+			Value: valueC,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("metric %s not found", name)
 
 }
 
-func (m *MemStorage) Show() {
+func (ms *MemStorage) ShowAllMetric() {
 	fmt.Println("-------------GAUGE-------------")
-	for k, v := range m.gauge {
+	for k, v := range ms.gauge {
 		fmt.Printf("%s : %5.5f \n", k, v)
 	}
 	fmt.Println("-------------COUNTER-------------")
-	for k, v := range m.counter {
+	for k, v := range ms.counter {
 		fmt.Printf("%s : %d \n", k, v)
 	}
+}
+
+func (ms *MemStorage) GetAllMetric() *[]model.Metrica {
+
+	var mm []model.Metrica
+
+	for k, v := range ms.gauge {
+
+		mm = append(mm, model.Metrica{
+			Name:  k,
+			Kind:  model.Gauge,
+			Value: v,
+		})
+	}
+
+	for k, v := range ms.counter {
+
+		mm = append(mm, model.Metrica{
+			Name:  k,
+			Kind:  model.Counter,
+			Value: v,
+		})
+	}
+
+	return &mm
 }
