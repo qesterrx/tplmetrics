@@ -82,8 +82,8 @@ func TestGetMetric(t *testing.T) {
 	storage.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: "5"})
 	storage.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Gauge, Value: "5.05005"})
 
-	val_c, _ := storage.GetMetric("c1")
-	val_g, _ := storage.GetMetric("g1")
+	valC, _ := storage.GetMetric("c1")
+	valG, _ := storage.GetMetric("g1")
 
 	router := GetRouter(storage)
 
@@ -99,14 +99,14 @@ func TestGetMetric(t *testing.T) {
 			url:        "/value/counter/c1",
 			method:     http.MethodGet,
 			statusCode: http.StatusOK,
-			body:       val_c.GetMetricaValue(),
+			body:       valC.GetMetricaValue(),
 		},
 		{
 			name:       "Get exists gauge",
 			url:        "/value/gauge/g1",
 			method:     http.MethodGet,
 			statusCode: http.StatusOK,
-			body:       val_g.GetMetricaValue(),
+			body:       valG.GetMetricaValue(),
 		},
 		{
 			name:       "Not exists value",
