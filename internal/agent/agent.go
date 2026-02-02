@@ -69,7 +69,7 @@ func Sender(queue <-chan model.Metrica, reportInterval int, host string) {
 	for {
 		select {
 		case metrica := <-queue:
-			//fmt.Printf("Reader: получил %v\n", metrica)
+
 			url := fmt.Sprintf("http://%s/update/%s/%s/%s", host, metrica.Kind, metrica.Name, metrica.GetMetricaValue())
 			resp, err := client.R().
 				SetHeader("Content-Type", "text/plain").
