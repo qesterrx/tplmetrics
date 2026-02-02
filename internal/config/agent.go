@@ -22,11 +22,11 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 
 	flag.Parse()
 
-	if cfg.PoolInterval <= 1 {
+	if cfg.PoolInterval < 1 {
 		return nil, fmt.Errorf("PoolInterval can't be less 1, got %d", cfg.PoolInterval)
 	}
 
-	if cfg.ReportInterval <= 1 {
+	if cfg.ReportInterval < 1 {
 		return nil, fmt.Errorf("ReportInterval can't be less 1, got %d", cfg.ReportInterval)
 	}
 
