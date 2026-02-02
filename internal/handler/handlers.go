@@ -1,11 +1,11 @@
 package handler
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"text/template"
 
 	"github.com/go-chi/chi"
 	"github.com/qesterrx/tplmetrics/internal/model"
@@ -31,7 +31,29 @@ func GetAllCurrentMetric(storage repository.Repository) http.HandlerFunc {
 		}
 
 		metrics := storage.GetAllMetric()
-		json.NewEncoder(w).Encode(metrics)
+
+		tmpl := `
+		<html>
+    		<head><title>Current metric</title></head>
+			<body>
+				<h2>Current metric</h2>
+				<ul>
+                {{range .Metric}}
+                	<li>{{.Name}} : {{.Value}}</li>
+                {{end}}
+            	</ul>
+			</body>
+		</html>`
+
+		data := struct {
+			Metric []model.Metrica
+		}{
+			Metric: *metrics,
+		}
+
+		t, _ := template.New("home").Parse(tmpl)
+		t.Execute(w, data)
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 	})

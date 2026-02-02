@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
@@ -17,6 +18,7 @@ func main() {
 
 func run() error {
 	storage := repository.NewMemStorage()
+	config := config.ParseParamsServer()
 
-	return http.ListenAndServe("localhost:8080", handler.GetRouter(storage))
+	return http.ListenAndServe(config.ServerHost.String(), handler.GetRouter(storage))
 }

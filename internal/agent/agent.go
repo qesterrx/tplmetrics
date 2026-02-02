@@ -5,7 +5,6 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"runtime"
-	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
@@ -16,21 +15,6 @@ import (
 По заданию не ясно как надо делать этого клиента.
 Все таки если мы опрашиваем метрики каждые N минут а отправляем реже - не понятно надо ли отправлять метрики gauge (мы же все равно будем сохранять толкьо последнее значение?)
 */
-
-func RunAgent(pollInterval int, reportInterval int, host string) error {
-
-	queue := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go MetricCollector(queue, pollInterval)
-	go Sender(queue, reportInterval, host)
-
-	wg.Wait()
-	return nil
-
-}
-
 func MetricCollector(queue chan<- model.Metrica, pollInterval int) {
 
 	counter := 0
@@ -86,7 +70,7 @@ func Sender(queue <-chan model.Metrica, reportInterval int, host string) {
 		select {
 		case metrica := <-queue:
 			//fmt.Printf("Reader: получил %v\n", metrica)
-			url := fmt.Sprintf("%s/update/%s/%s/%s", host, metrica.Kind, metrica.Name, metrica.GetMetricaValue())
+			url := fmt.Sprintf("http://%s/update/%s/%s/%s", host, metrica.Kind, metrica.Name, metrica.GetMetricaValue())
 			resp, err := client.R().
 				SetHeader("Content-Type", "text/plain").
 				Post(url)
