@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"strconv"
 )
 
 type KindValue string
@@ -11,10 +12,11 @@ const (
 	Counter KindValue = "counter"
 )
 
-type Metrica struct {
-	Name  string    `json:"name"`
-	Kind  KindValue `json:"kind"`
-	Value any       `json:"value"`
+type Metrica interface {
+	Name() string
+	Value() string
+	Kind() KindValue
+	UpdateValue(Metrica) error
 }
 
 func GetKindValue(kind string) (KindValue, error) {
@@ -28,30 +30,23 @@ func GetKindValue(kind string) (KindValue, error) {
 	}
 }
 
-func NewGaugeMetrica(name string, value float64) *Metrica {
-	return &Metrica{
-		Name:  name,
-		Kind:  Gauge,
-		Value: value,
-	}
-}
+// Фабрика метрик
+func NewMetrica(name string, kind KindValue, value string) (Metrica, error) {
+	switch {
+	case kind == Counter:
+		valueInt, err := strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
 
-func NewCounterMetrica(name string, value int64) *Metrica {
-	return &Metrica{
-		Name:  name,
-		Kind:  Counter,
-		Value: value,
-	}
-}
+		return NewMetricaCounter(name, valueInt), nil
+	case kind == Gauge:
+		valueFlt, err := strconv.ParseFloat(value, 64)
+		if err != nil {
+			return nil, err
+		}
 
-func (m *Metrica) GetMetricaValue() string {
-	switch m.Kind {
-	case Gauge:
-		return fmt.Sprintf("%.3f", m.Value)
-	case Counter:
-		return fmt.Sprintf("%d", m.Value)
-	default:
-		return fmt.Sprintf("%v", m.Value)
+		return NewMetricaGauge(name, valueFlt), nil
 	}
-
+	return nil, fmt.Errorf("NewMetrica unimplemented kind %s", kind)
 }

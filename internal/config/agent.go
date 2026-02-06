@@ -3,16 +3,20 @@ package config
 import (
 	"flag"
 	"fmt"
+	"time"
 )
 
 type ConfigAgent struct {
-	ServerHost     NetAddress
-	PoolInterval   int
-	ReportInterval int
+	ServerHost       NetAddress
+	PoolInterval     int
+	ReportInterval   int
+	ClientErrorCount int
 }
 
 func ParseParamsAgent() (*ConfigAgent, error) {
 	var cfg ConfigAgent
+
+	cfg.ClientErrorCount = 1000
 
 	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
 	flag.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
@@ -31,4 +35,12 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (ca *ConfigAgent) DurationTerminate() time.Duration {
+	if ca.PoolInterval > ca.ReportInterval {
+		return time.Duration(ca.PoolInterval) * time.Second
+	} else {
+		return time.Duration(ca.ReportInterval) * time.Second
+	}
 }

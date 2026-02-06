@@ -1,7 +1,6 @@
 package repository
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/qesterrx/tplmetrics/internal/model"
@@ -9,54 +8,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdateMetric(t *testing.T) {
+func TestUpdateMetrica(t *testing.T) {
 
 	var err error
 
 	mm := NewMemStorage()
 
 	//---Base Counter
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: 1})
+	err = mm.UpdateMetrica(model.NewMetricaCounter("c1", 1))
 	require.NoError(t, err)
 
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: 1})
+	err = mm.UpdateMetrica(model.NewMetricaCounter("c1", 1))
 	assert.NoError(t, err)
-	c1, ok := mm.counter["c1"]
+	c1, ok := mm.storage["c1"]
 	assert.True(t, ok)
-	assert.Equal(t, int64(2), c1)
-
-	//-------Check wrong type
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: "1.01"})
-	assert.Error(t, err)
-
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: "abs"})
-	assert.Error(t, err)
-
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: ""})
-	assert.Error(t, err)
+	assert.Equal(t, model.FormatMetricaCounter(int64(2)), c1.Value())
 
 	//---Base Gauge
-	err = mm.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Gauge, Value: 1.0001})
+	err = mm.UpdateMetrica(model.NewMetricaGauge("g1", 1.0001))
 	require.NoError(t, err)
 
-	err = mm.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Gauge, Value: 2.0002})
+	err = mm.UpdateMetrica(model.NewMetricaGauge("g1", 2.2222))
 	assert.NoError(t, err)
-	g1, ok := mm.gauge["g1"]
+	g1, ok := mm.storage["g1"]
 	assert.True(t, ok)
-	assert.Equal(t, "2.0002", fmt.Sprintf("%1.4f", g1))
-
-	//-------Check wrong type
-	err = mm.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Gauge, Value: "abs"})
-	assert.Error(t, err)
-
-	err = mm.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Gauge, Value: ""})
-	assert.Error(t, err)
+	assert.Equal(t, model.FormatMetricaGauge(float64(2.2222)), g1.Value())
 
 	//---Check have already registr
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Gauge, Value: "1"})
+	err = mm.UpdateMetrica(model.NewMetricaGauge("c1", 1.0001))
 	assert.Error(t, err)
 
-	err = mm.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Counter, Value: "1"})
+	err = mm.UpdateMetrica(model.NewMetricaCounter("g1", 1))
 	assert.Error(t, err)
 
 }
@@ -65,23 +47,26 @@ func TestGetMetric(t *testing.T) {
 
 	var err error
 
+	counterValue := int64(1)
+	counterGauge := float64(1.1111)
+
 	mm := NewMemStorage()
-	err = mm.UpdateMetric(&model.Metrica{Name: "c1", Kind: model.Counter, Value: 1})
+	err = mm.UpdateMetrica(model.NewMetricaCounter("c1", counterValue))
 	require.NoError(t, err)
-	err = mm.UpdateMetric(&model.Metrica{Name: "g1", Kind: model.Gauge, Value: 1.0001})
+	err = mm.UpdateMetrica(model.NewMetricaGauge("g1", counterGauge))
 	require.NoError(t, err)
 
-	metric, err := mm.GetMetric("c1")
+	mtrk, err := mm.Metrica("c1")
 	assert.NoError(t, err)
-	assert.Equal(t, model.Counter, metric.Kind)
-	assert.Equal(t, int64(1), metric.Value)
+	assert.Equal(t, model.Counter, mtrk.Kind())
+	assert.Equal(t, model.FormatMetricaCounter(counterValue), mtrk.Value())
 
-	metric, err = mm.GetMetric("g1")
+	mtrk, err = mm.Metrica("g1")
 	assert.NoError(t, err)
-	assert.Equal(t, model.Gauge, metric.Kind)
-	assert.Equal(t, float64(1.0001), metric.Value)
+	assert.Equal(t, model.Gauge, mtrk.Kind())
+	assert.Equal(t, model.FormatMetricaGauge(counterGauge), mtrk.Value())
 
-	_, err = mm.GetMetric("notfound")
+	_, err = mm.Metrica("notfound")
 	assert.Error(t, err)
 
 }

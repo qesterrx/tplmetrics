@@ -1,7 +1,11 @@
 package main
 
 import (
-	"sync"
+	"context"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/qesterrx/tplmetrics/internal/agent"
 	"github.com/qesterrx/tplmetrics/internal/config"
@@ -20,13 +24,24 @@ func main() {
 
 func RunAgent(config *config.ConfigAgent) {
 
-	queue := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
-	var wg sync.WaitGroup
-	wg.Add(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	queueCnah := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
 
-	go agent.MetricCollector(queue, config.PoolInterval)
-	go agent.Sender(queue, config.ReportInterval, config.ServerHost.String())
+	go func() {
+		agent.Collector(ctx, queueCnah, config.PoolInterval)
+		cancel()
+	}()
 
-	wg.Wait()
+	go func() {
+		agent.Sender(ctx, queueCnah, config.ReportInterval, config.ServerHost.String(), config.ClientErrorCount)
+		cancel()
+	}()
+
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-sigChan
+	cancel()
+	time.Sleep(config.DurationTerminate())
 
 }
