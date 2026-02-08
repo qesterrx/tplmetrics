@@ -1,0 +1,42 @@
+package model
+
+import "fmt"
+
+type MetricaCounter struct {
+	name  string
+	kind  KindValue
+	value int64
+}
+
+func NewMetricaCounter(name string, value int64) *MetricaCounter {
+	return &MetricaCounter{
+		name:  name,
+		kind:  Counter,
+		value: value,
+	}
+}
+
+func (m *MetricaCounter) Name() string {
+	return m.name
+}
+
+func (m *MetricaCounter) Kind() KindValue {
+	return m.kind
+}
+
+func (m *MetricaCounter) Value() string {
+	return FormatMetricaCounter(m.value)
+}
+
+func (m *MetricaCounter) UpdateValue(mtrk Metrica) error {
+	if v, ok := mtrk.(*MetricaCounter); ok {
+		m.value = m.value + v.value
+		return nil
+	} else {
+		return fmt.Errorf("MetricaGauge.UpdateValue type mismatch: want MetricaCounter got %v", mtrk)
+	}
+}
+
+func FormatMetricaCounter(value int64) string {
+	return fmt.Sprintf("%d", value)
+}
