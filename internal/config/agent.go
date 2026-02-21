@@ -3,8 +3,11 @@ package config
 import (
 	"flag"
 	"fmt"
-	"time"
+	"os"
+	"strconv"
 )
+
+const ClientErrorCount = 1000
 
 type ConfigAgent struct {
 	ServerHost       NetAddress
@@ -16,31 +19,51 @@ type ConfigAgent struct {
 func ParseParamsAgent() (*ConfigAgent, error) {
 	var cfg ConfigAgent
 
-	cfg.ClientErrorCount = 1000
+	cfg.ClientErrorCount = ClientErrorCount
 
 	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
 	flag.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
 
-	flag.IntVar(&cfg.PoolInterval, "p", 2, "Time in sec after which collecting mertic (>=1)")
-	flag.IntVar(&cfg.ReportInterval, "r", 10, "Time in sec after which sending to server (>=1)")
+	flag.IntVar(&cfg.PoolInterval, "p", 2, "PoolInterval - time in sec after which collecting mertic (>=1)")
+	flag.IntVar(&cfg.ReportInterval, "r", 10, "ReportInterval - time in sec after which sending to server (>=1)")
 
 	flag.Parse()
 
+	//Переопределим параметрами из ENV
+	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {
+		newServerHost := NetAddress{}
+		err := newServerHost.Set(envServerHost)
+		if err != nil {
+			return nil, fmt.Errorf("Env $ADDRESS has wrong format: %v", err.Error())
+		} else {
+			cfg.ServerHost = newServerHost
+		}
+	}
+
+	if envPoolInterval := os.Getenv("POLL_INTERVAL"); envPoolInterval != "" {
+		intPoolInterval, err := strconv.ParseInt(envPoolInterval, 10, 0)
+		if err != nil {
+			return nil, fmt.Errorf("Env $POLL_INTERVAL has wrong format: %v", err.Error())
+		}
+		cfg.PoolInterval = int(intPoolInterval)
+	}
+
+	if envReportInterval := os.Getenv("REPORT_INTERVAL"); envReportInterval != "" {
+		intReportInterval, err := strconv.ParseInt(envReportInterval, 10, 0)
+		if err != nil {
+			return nil, fmt.Errorf("Env $REPORT_INTERVAL has wrong format: %v", err.Error())
+		}
+		cfg.ReportInterval = int(intReportInterval)
+	}
+
+	//Дополнительные проверки параметров
 	if cfg.PoolInterval < 1 {
-		return nil, fmt.Errorf("PoolInterval can't be less 1, got %d", cfg.PoolInterval)
+		return nil, fmt.Errorf("PoolInterval can't be less 1, got %d, check flag -p and ENV $POLL_INTERVAL", cfg.PoolInterval)
 	}
 
 	if cfg.ReportInterval < 1 {
-		return nil, fmt.Errorf("ReportInterval can't be less 1, got %d", cfg.ReportInterval)
+		return nil, fmt.Errorf("ReportInterval can't be less 1, got %d, check flag -r and ENV $REPORT_INTERVAL", cfg.ReportInterval)
 	}
 
 	return &cfg, nil
-}
-
-func (ca *ConfigAgent) DurationTerminate() time.Duration {
-	if ca.PoolInterval > ca.ReportInterval {
-		return time.Duration(ca.PoolInterval) * time.Second
-	} else {
-		return time.Duration(ca.ReportInterval) * time.Second
-	}
 }

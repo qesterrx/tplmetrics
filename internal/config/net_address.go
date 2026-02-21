@@ -16,7 +16,6 @@ func (na *NetAddress) String() string {
 }
 
 func (na *NetAddress) Set(value string) error {
-	//fmt.Println("NetAddress.Set value=", value)
 
 	splt := strings.Split(value, ":")
 	if len(splt) != 2 {

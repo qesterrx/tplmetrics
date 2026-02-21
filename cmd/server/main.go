@@ -17,8 +17,13 @@ func main() {
 }
 
 func run() error {
+
+	config, err := config.ParseParamsServer()
+	if err != nil {
+		return err
+	}
+
 	storage := repository.NewMemStorage()
-	config := config.ParseParamsServer()
 
 	return http.ListenAndServe(config.ServerHost.String(), handler.GetRouter(storage))
 }
