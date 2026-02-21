@@ -9,10 +9,15 @@ import (
 
 	"github.com/qesterrx/tplmetrics/internal/agent"
 	"github.com/qesterrx/tplmetrics/internal/config"
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
+	"github.com/rs/zerolog"
 )
 
 func main() {
+	logger.InitLogger()
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+
 	config, err := config.ParseParamsAgent()
 	if err != nil {
 		panic(err)
@@ -47,6 +52,7 @@ func RunAgent(config *config.ConfigAgent) {
 
 	<-sigChan
 	cancel()
+	logger.Log.Debug().Msg("Ожидание завершения программы")
 	wg.Wait()
 
 }

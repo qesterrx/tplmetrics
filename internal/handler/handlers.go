@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/go-chi/chi"
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
@@ -14,9 +15,9 @@ import (
 func GetRouter(storage repository.MetricaStorage) chi.Router {
 	r := chi.NewRouter()
 
-	r.Post(`/update/{kind}/{name}/{value}`, UpdateMetricaHandler(storage))
-	r.Get(`/value/{kind}/{name}`, GetMetricaHandler(storage))
-	r.Get(`/`, GetAllCurrentMetricsHandler(storage))
+	r.Post(`/update/{kind}/{name}/{value}`, logger.LoggingMiddleware(UpdateMetricaHandler(storage)))
+	r.Get(`/value/{kind}/{name}`, logger.LoggingMiddleware(GetMetricaHandler(storage)))
+	r.Get(`/`, logger.LoggingMiddleware(GetAllCurrentMetricsHandler(storage)))
 
 	return r
 }

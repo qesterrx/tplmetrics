@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
@@ -18,14 +19,20 @@ import (
 */
 func Collector(ctx context.Context, queue chan<- model.Metrica, pollInterval int) {
 
+	logger.Log.Debug().Msg("Запуск Collector")
+
+	ticker := time.NewTicker(time.Second * time.Duration(pollInterval))
+	defer ticker.Stop()
+
 	counter := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			//Если получили сигнал завершения - останавливаемся
+			logger.Log.Debug().Msg("Остановка Collector по контексту")
 			return
-		default:
+		case <-ticker.C:
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
 
@@ -62,8 +69,7 @@ func Collector(ctx context.Context, queue chan<- model.Metrica, pollInterval int
 
 			counter++
 
-			//Метрики собраны, засыпаем на pollInterval
-			time.Sleep(time.Second * time.Duration(pollInterval))
+			logger.Log.Debug().Msg("Метрики собраны")
 		}
 	}
 
@@ -71,19 +77,23 @@ func Collector(ctx context.Context, queue chan<- model.Metrica, pollInterval int
 
 func Sender(ctx context.Context, queue <-chan model.Metrica, reportInterval int, host string, clientErrorCount int) {
 
+	logger.Log.Debug().Msg("Запуск Sender")
+
 	client := resty.New()
 	clentErrorCounter := 0
+	countRequest := 0
 
 	for {
 		select {
 		case <-ctx.Done():
 			//Если получили сигнал завершения останавливаемся
+			logger.Log.Debug().Msg("Остановка Sender по контексту")
 			return
 		case metrica := <-queue:
 
 			if clentErrorCounter > clientErrorCount {
 				//Если количество ошибок превысило лимит - завершаем работу
-				fmt.Printf("Sender превышено допустимое количество ошибок отправки")
+				logger.Log.Error().Msg("Sender превышено допустимое количество ошибок отправки")
 				return
 			}
 
@@ -94,20 +104,26 @@ func Sender(ctx context.Context, queue <-chan model.Metrica, reportInterval int,
 
 			if err != nil {
 				//Получили ошибку при выполнении запроса
+				logger.Log.Error().Msg(fmt.Sprintf("Sender ошибка выполнения запроса %s", err.Error()))
 				clentErrorCounter++
 				continue
 			}
 
 			if resp.StatusCode() != http.StatusOK {
 				//Получили от сервера код который не ожидали
+				logger.Log.Error().Msg("Sender сервер не принял сообщение StatusCode!=OK")
 				clentErrorCounter++
 				continue
 			}
 
+			countRequest++
+
 		default:
 			//Канал пуст, отправили все что было в канале а знчит засыпаем на reportInterval секунд
+			logger.Log.Debug().Msg(fmt.Sprintf("Метрики отправлены на сервер (%d)", countRequest))
+			countRequest = 0
 			time.Sleep(time.Second * time.Duration(reportInterval))
 		}
-	}
 
+	}
 }
