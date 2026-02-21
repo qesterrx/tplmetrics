@@ -34,7 +34,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		newServerHost := NetAddress{}
 		err := newServerHost.Set(envServerHost)
 		if err != nil {
-			return nil, fmt.Errorf("Env $ADDRESS has wrong format: %v", err.Error())
+			return nil, fmt.Errorf("env $ADDRESS has wrong format: %v", err.Error())
 		} else {
 			cfg.ServerHost = newServerHost
 		}
@@ -43,7 +43,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	if envPoolInterval := os.Getenv("POLL_INTERVAL"); envPoolInterval != "" {
 		intPoolInterval, err := strconv.ParseInt(envPoolInterval, 10, 0)
 		if err != nil {
-			return nil, fmt.Errorf("Env $POLL_INTERVAL has wrong format: %v", err.Error())
+			return nil, fmt.Errorf("env $POLL_INTERVAL has wrong format: %v", err.Error())
 		}
 		cfg.PoolInterval = int(intPoolInterval)
 	}
@@ -51,7 +51,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	if envReportInterval := os.Getenv("REPORT_INTERVAL"); envReportInterval != "" {
 		intReportInterval, err := strconv.ParseInt(envReportInterval, 10, 0)
 		if err != nil {
-			return nil, fmt.Errorf("Env $REPORT_INTERVAL has wrong format: %v", err.Error())
+			return nil, fmt.Errorf("env $REPORT_INTERVAL has wrong format: %v", err.Error())
 		}
 		cfg.ReportInterval = int(intReportInterval)
 	}

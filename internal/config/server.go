@@ -22,7 +22,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 		newServerHost := NetAddress{}
 		err := newServerHost.Set(envServerHost)
 		if err != nil {
-			return nil, fmt.Errorf("Env $ADDRESS has wrong format: %v", err.Error())
+			return nil, fmt.Errorf("env $ADDRESS has wrong format: %v", err.Error())
 		} else {
 			cfg.ServerHost = newServerHost
 		}
