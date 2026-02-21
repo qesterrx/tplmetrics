@@ -17,17 +17,20 @@ type ConfigAgent struct {
 }
 
 func ParseParamsAgent() (*ConfigAgent, error) {
+
+	fs := flag.NewFlagSet("", flag.PanicOnError)
+
 	var cfg ConfigAgent
 
 	cfg.ClientErrorCount = ClientErrorCount
 
 	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
-	flag.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
+	fs.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
 
-	flag.IntVar(&cfg.PoolInterval, "p", 2, "PoolInterval - time in sec after which collecting mertic (>=1)")
-	flag.IntVar(&cfg.ReportInterval, "r", 10, "ReportInterval - time in sec after which sending to server (>=1)")
+	fs.IntVar(&cfg.PoolInterval, "p", 2, "PoolInterval - time in sec after which collecting mertic (>=1)")
+	fs.IntVar(&cfg.ReportInterval, "r", 10, "ReportInterval - time in sec after which sending to server (>=1)")
 
-	flag.Parse()
+	fs.Parse(os.Args[1:])
 
 	//Переопределим параметрами из ENV
 	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {

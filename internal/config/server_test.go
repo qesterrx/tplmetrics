@@ -1,7 +1,6 @@
 package config
 
 import (
-	"flag"
 	"os"
 	"testing"
 
@@ -43,10 +42,7 @@ func TestParseParamsServer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			if test.flagset != nil {
-				os.Args = append([]string{app}, test.flagset...)
-				flag.CommandLine = flag.NewFlagSet(app, flag.ExitOnError)
-			}
+			os.Args = append([]string{app}, test.flagset...)
 
 			if test.envset != nil {
 				for k, v := range test.envset {

@@ -13,7 +13,6 @@ import (
 )
 
 func main() {
-
 	config, err := config.ParseParamsAgent()
 	if err != nil {
 		panic(err)

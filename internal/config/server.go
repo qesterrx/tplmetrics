@@ -11,11 +11,14 @@ type ConfigServer struct {
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
+
+	fs := flag.NewFlagSet("", flag.PanicOnError)
+
 	var cfg ConfigServer
 	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
-	flag.Var(&cfg.ServerHost, "a", "Endpoint for server. Format host:port")
+	fs.Var(&cfg.ServerHost, "a", "Endpoint for server. Format host:port")
 
-	flag.Parse()
+	fs.Parse(os.Args[1:])
 
 	//Переопределим параметрами из ENV
 	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {
