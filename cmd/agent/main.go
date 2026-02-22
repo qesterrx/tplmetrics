@@ -10,12 +10,10 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/agent"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
-	"github.com/rs/zerolog"
 )
 
 func main() {
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	config, err := config.ParseParamsAgent()
 	if err != nil {

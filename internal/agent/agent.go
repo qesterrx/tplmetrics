@@ -1,9 +1,12 @@
 package agent
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
@@ -86,10 +89,23 @@ func CallServer(client *resty.Client, host string, metrica model.Metrica) error 
 		return fmt.Errorf("CallServer ошибка сериализация метрики %s", err.Error())
 	}
 
+	var compressed bytes.Buffer
+
+	gzWriter := gzip.NewWriter(&compressed)
+
+	_, err = gzWriter.Write(body)
+	if err != nil {
+		log.Fatal("Error writing to gzip:", err)
+	}
+
+	// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
+	gzWriter.Close()
+
 	url := fmt.Sprintf("http://%s/update/", host)
 	resp, err := client.R().
+		SetHeader("Content-Encoding", "gzip").
 		SetHeader("Content-Type", "application/json").
-		SetBody(body).
+		SetBody(compressed.Bytes()).
 		Post(url)
 
 	if err != nil {
@@ -138,24 +154,20 @@ func Sender(ctx context.Context, reportInterval int, host string, clientErrorCou
 					mtrk := model.NewMetricaGauge(key, value)
 					err := CallServer(client, host, mtrk)
 					if err != nil {
-						logger.Log.Error().Msg(fmt.Sprintf("Sender ошибка обращения к серверу: %s", err.Error()))
+						logger.Log.Error().Msg(fmt.Sprintf("Sender MetricaGauge ошибка обращения к серверу: %s", err.Error()))
 						clentErrorCounter++
 					}
 				}
 
 				//Метрики типа Delta-Counter Все приседание ради них
-				delta, ok := storage.StartGetDeltaWithLock(key)
+				delta, ok := storage.GetDelta(key)
 				if ok {
 					mtrk := model.NewMetricaCounter(key, delta)
 					err := CallServer(client, host, mtrk)
 					if err != nil {
-						//Сразу освобождаем блокировку, значение чистить не надо
-						storage.EndGetDeltaWithLock(false)
-						logger.Log.Error().Msg(fmt.Sprintf("Sender ошибка обращения к серверу: %s", err.Error()))
+						logger.Log.Error().Msg(fmt.Sprintf("Sender MetricaCounter ошибка обращения к серверу: %s", err.Error()))
 						clentErrorCounter++
 					}
-					//Освобождаем блокировку, значение можно почистить
-					storage.EndGetDeltaWithLock(true)
 				}
 
 				//Вдруг у нас много метрик но пришла команда завершения по контексту

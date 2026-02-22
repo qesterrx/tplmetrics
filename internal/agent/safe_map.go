@@ -61,6 +61,15 @@ func (sm *SafeMap) GetValue(key string) (float64, bool) {
 	return value, ok
 }
 
+func (sm *SafeMap) GetDelta(key string) (int64, bool) {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+	value, ok := sm.deltas[key]
+	sm.deltas[key] = 0
+	return value, ok
+}
+
+/*
 func (sm *SafeMap) StartGetDeltaWithLock(key string) (int64, bool) {
 	sm.mutex.Lock()
 	value, ok := sm.deltas[key]
@@ -69,7 +78,6 @@ func (sm *SafeMap) StartGetDeltaWithLock(key string) (int64, bool) {
 	} else {
 		sm.mutex.Unlock()
 	}
-
 	return value, ok
 }
 
@@ -78,4 +86,4 @@ func (sm *SafeMap) EndGetDeltaWithLock(confirm bool) {
 		sm.deltas[sm.lockedKey] = 0
 	}
 	sm.mutex.Unlock()
-}
+}*/

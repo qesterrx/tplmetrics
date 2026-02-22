@@ -37,7 +37,7 @@ func (lrw *logResponseWriter) WriteHeader(statusCode int) {
 	lrw.statusCode = statusCode
 }
 
-func LoggingMiddleware(h http.HandlerFunc) http.HandlerFunc {
+func LoggingMiddleware(h http.Handler) http.Handler {
 	loggedHandler := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 
@@ -52,7 +52,8 @@ func LoggingMiddleware(h http.HandlerFunc) http.HandlerFunc {
 			Str("method", r.Method).
 			Str("duration", duration.String()).
 			Int("code", lrw.statusCode).
-			Int("size", lrw.size).
+			Int64("size request", r.ContentLength).
+			Int("size response", lrw.size).
 			Send()
 
 	}
