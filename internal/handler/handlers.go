@@ -20,8 +20,8 @@ func GetRouter(storage repository.MetricaStorage) chi.Router {
 	r.Post(`/update/{kind}/{name}/{value}`, logger.LoggingMiddleware(UpdateMetricaHandler(storage)))
 	r.Get(`/value/{kind}/{name}`, logger.LoggingMiddleware(GetMetricaHandler(storage)))
 	r.Get(`/`, logger.LoggingMiddleware(GetAllCurrentMetricsHandler(storage)))
-	r.Post(`/update`, logger.LoggingMiddleware(UpdateMetricaJSONHandler(storage)))
-	r.Post(`/value`, logger.LoggingMiddleware(GetMetricaJSONHandler(storage)))
+	r.Post(`/update/`, logger.LoggingMiddleware(UpdateMetricaJSONHandler(storage)))
+	r.Post(`/value/`, logger.LoggingMiddleware(GetMetricaJSONHandler(storage)))
 
 	return r
 }
@@ -154,7 +154,10 @@ func UpdateMetricaJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
 			return
 		}
 
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte("{}"))
 
 	})
 }
@@ -192,9 +195,10 @@ func GetMetricaJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
 			return
 		}
 
-		w.Write(body)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
+
+		w.Write(body)
 
 	})
 }

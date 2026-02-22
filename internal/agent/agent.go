@@ -86,7 +86,7 @@ func CallServer(client *resty.Client, host string, metrica model.Metrica) error 
 		return fmt.Errorf("CallServer ошибка сериализация метрики %s", err.Error())
 	}
 
-	url := fmt.Sprintf("http://%s/update", host)
+	url := fmt.Sprintf("http://%s/update/", host)
 	resp, err := client.R().
 		SetHeader("Content-Type", "application/json").
 		SetBody(body).
