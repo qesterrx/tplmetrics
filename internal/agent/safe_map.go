@@ -48,7 +48,7 @@ func (sm *SafeMap) GetKeys() []string {
 	sm.mutex.Lock()
 	defer sm.mutex.Unlock()
 	keys := []string{}
-	for k, _ := range sm.keys {
+	for k := range sm.keys {
 		keys = append(keys, k)
 	}
 	return keys
