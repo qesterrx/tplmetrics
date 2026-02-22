@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/qesterrx/tplmetrics/internal/agent"
 	"github.com/qesterrx/tplmetrics/internal/config"
@@ -28,6 +29,8 @@ func main() {
 func RunAgent(config *config.ConfigAgent) {
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	time.Sleep(5 * time.Second)
 
 	wg := sync.WaitGroup{}
 
