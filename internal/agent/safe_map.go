@@ -65,7 +65,9 @@ func (sm *SafeMap) GetDelta(key string) (int64, bool) {
 	sm.mutex.Lock()
 	defer sm.mutex.Unlock()
 	value, ok := sm.deltas[key]
-	sm.deltas[key] = 0
+	if ok {
+		sm.deltas[key] = 0
+	}
 	return value, ok
 }
 

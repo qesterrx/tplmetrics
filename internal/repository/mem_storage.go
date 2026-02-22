@@ -8,15 +8,17 @@ import (
 )
 
 type MemStorage struct {
-	storage map[string]model.Metrica
-	keys    []string
+	storage     map[string]model.Metrica
+	keys        []string
+	eventsQueue chan string
 }
 
 // Фабрика
 func NewMemStorage() *MemStorage {
 	mm := MemStorage{
-		storage: make(map[string]model.Metrica),
-		keys:    make([]string, 0),
+		storage:     make(map[string]model.Metrica),
+		keys:        make([]string, 0),
+		eventsQueue: make(chan string, 10000),
 	}
 
 	return &mm
@@ -44,6 +46,7 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 	if !ok {
 		ms.storage[key] = mtrk
 		ms.keys = append(ms.keys, key)
+		ms.eventsQueue <- "create"
 		return nil
 	}
 
@@ -51,6 +54,7 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 	if err != nil {
 		return err
 	}
+	ms.eventsQueue <- "update"
 
 	return nil
 
@@ -85,4 +89,8 @@ func (ms *MemStorage) Debug() {
 		mtrk := ms.storage[key]
 		fmt.Printf("%s [%s]: %s \n", mtrk.Name(), mtrk.Kind(), mtrk.Value())
 	}
+}
+
+func (ms *MemStorage) GetQueueEvents() chan string {
+	return ms.eventsQueue
 }

@@ -1,34 +1,95 @@
 package main
 
 import (
+	"context"
 	"net/http"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+	"time"
 
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/repository"
+	"github.com/rs/zerolog"
 )
 
 func main() {
 
-	if err := run(); err != nil {
-		panic(err)
-	}
-
-}
-
-func run() error {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	logger.InitLogger()
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
-		return err
+		panic(err)
 	}
 
 	storage := repository.NewMemStorage()
 
-	logger.Log.Debug().Msg("Running server")
+	if config.RestoreFromFileStorage {
+		err = repository.LoadDataFromFile(config.FileStorageName, storage)
+		if err != nil {
+			logger.Log.Error().Msg("LoadDataFromFile " + err.Error())
+		}
+	}
 
-	return http.ListenAndServe(config.ServerHost.String(), handler.GetRouter(storage))
+	var wg sync.WaitGroup
+
+	if config.StoreInterval == 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logger.Log.Debug().Msg("Running StoreInterval")
+			repository.EventSaver(ctx, config.FileStorageName, storage)
+			cancel()
+		}()
+	}
+
+	if config.StoreInterval > 0 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			logger.Log.Debug().Msg("Running TimeSaver")
+			repository.TimeSaver(ctx, config.FileStorageName, config.StoreInterval, storage)
+			cancel()
+		}()
+	}
+
+	server := &http.Server{
+		Addr:    config.ServerHost.String(),
+		Handler: handler.GetRouter(storage),
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		logger.Log.Debug().Msg("Running server")
+		err := server.ListenAndServe()
+		logger.Log.Error().Msg("ListenAndServe " + err.Error())
+		cancel()
+	}()
+
+	// Канал для сигналов ОС
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Ждем сигнал завершения
+	<-sigChan
+	cancel()
+
+	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+
+	// Пытаемся остановить сервер gracefully
+	if err := server.Shutdown(ctxShutdown); err != nil {
+		logger.Log.Error().Msg("Shutdown error:" + err.Error())
+	}
+
+	logger.Log.Info().Msg("Shutdown server")
+	wg.Wait()
 }
