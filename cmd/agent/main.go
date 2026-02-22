@@ -41,7 +41,7 @@ func RunAgent(config *config.ConfigAgent) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		agent.SenderByURI(ctx, config.ReportInterval, config.ServerHost.String(), config.ClientErrorCount)
+		agent.Sender(ctx, config.ReportInterval, config.ServerHost.String(), config.ClientErrorCount)
 		cancel()
 	}()
 

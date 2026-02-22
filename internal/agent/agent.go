@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -78,27 +79,33 @@ func Collector(ctx context.Context, pollInterval int) {
 
 }
 
-func CallUpdateURI(client *resty.Client, host string, metrica model.Metrica) error {
+func CallServer(client *resty.Client, host string, metrica model.Metrica) error {
 
-	url := fmt.Sprintf("http://%s/update/%s/%s/%s", host, metrica.Kind(), metrica.Name(), metrica.Value())
+	body, err := json.Marshal(metrica)
+	if err != nil {
+		return fmt.Errorf("CallServer ошибка сериализация метрики %s", err.Error())
+	}
+
+	url := fmt.Sprintf("http://%s/update", host)
 	resp, err := client.R().
-		SetHeader("Content-Type", "text/plain").
+		SetHeader("Content-Type", "application/json").
+		SetBody(body).
 		Post(url)
 
 	if err != nil {
 		//Получили ошибку при выполнении запроса
-		return fmt.Errorf("Sender ошибка выполнения запроса %s", err.Error())
+		return fmt.Errorf("CallServer ошибка выполнения запроса %s", err.Error())
 	}
 
 	if resp.StatusCode() != http.StatusOK {
 		//Получили от сервера код который не ожидали
-		return fmt.Errorf("Sender сервер не принял сообщение StatusCode!=OK")
+		return fmt.Errorf("CallServer сервер не принял сообщение StatusCode!=OK")
 	}
 
 	return nil
 }
 
-func SenderByURI(ctx context.Context, reportInterval int, host string, clientErrorCount int) {
+func Sender(ctx context.Context, reportInterval int, host string, clientErrorCount int) {
 
 	logger.Log.Debug().Msg("Запуск Sender")
 
@@ -129,9 +136,9 @@ func SenderByURI(ctx context.Context, reportInterval int, host string, clientErr
 				value, ok := storage.GetValue(key)
 				if ok {
 					mtrk := model.NewMetricaGauge(key, value)
-					err := CallUpdateURI(client, host, mtrk)
+					err := CallServer(client, host, mtrk)
 					if err != nil {
-						logger.Log.Error().Msg(fmt.Sprintf("Ошибка обращения к серверу: %s", err.Error()))
+						logger.Log.Error().Msg(fmt.Sprintf("Sender ошибка обращения к серверу: %s", err.Error()))
 						clentErrorCounter++
 					}
 				}
@@ -140,11 +147,11 @@ func SenderByURI(ctx context.Context, reportInterval int, host string, clientErr
 				delta, ok := storage.StartGetDeltaWithLock(key)
 				if ok {
 					mtrk := model.NewMetricaCounter(key, delta)
-					err := CallUpdateURI(client, host, mtrk)
+					err := CallServer(client, host, mtrk)
 					if err != nil {
 						//Сразу освобождаем блокировку, значение чистить не надо
 						storage.EndGetDeltaWithLock(false)
-						logger.Log.Error().Msg(fmt.Sprintf("Ошибка обращения к серверу: %s", err.Error()))
+						logger.Log.Error().Msg(fmt.Sprintf("Sender ошибка обращения к серверу: %s", err.Error()))
 						clentErrorCounter++
 					}
 					//Освобождаем блокировку, значение можно почистить
