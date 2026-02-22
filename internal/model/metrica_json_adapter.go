@@ -19,12 +19,12 @@ func (mtrk *MetricaJSONAdapter) Metrica() (Metrica, error) {
 	switch kindValue {
 	case Counter:
 		if mtrk.Delta == nil {
-			return nil, fmt.Errorf("Не передано значение для Counter метрики")
+			return nil, fmt.Errorf("не передано значение для Counter метрики")
 		}
 		return NewMetricaCounter(mtrk.Name, *mtrk.Delta), nil
 	case Gauge:
 		if mtrk.Value == nil {
-			return nil, fmt.Errorf("Не передано значение для Gauge метрики")
+			return nil, fmt.Errorf("не передано значение для Gauge метрики")
 		}
 
 		return NewMetricaGauge(mtrk.Name, *mtrk.Value), nil
