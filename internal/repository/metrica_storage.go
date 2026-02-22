@@ -21,12 +21,12 @@ type MetricaStorage interface {
 	//Отладочный вызов
 	Debug()
 	//Очередь событий
-	GetQueueEvents() chan string
+	GetQueueEvents() *chan string
 }
 
 func EventSaver(ctx context.Context, filename string, storage MetricaStorage) {
 
-	queueEvent := storage.GetQueueEvents()
+	queueEvent := *storage.GetQueueEvents()
 
 	for {
 		select {
@@ -35,9 +35,9 @@ func EventSaver(ctx context.Context, filename string, storage MetricaStorage) {
 		case <-queueEvent:
 			err := SaveDataToFile(filename, storage)
 			if err != nil {
-				logger.Log.Error().Msg("Ошибка при сохранении данных в файл" + err.Error())
+				logger.Log.Error().Msg("EventSaver Ошибка при сохранении данных в файл" + err.Error())
 			} else {
-				logger.Log.Info().Msg("Сохранение данных в файл")
+				logger.Log.Info().Msg("EventSaver Сохранение данных в файл")
 			}
 		}
 	}
@@ -55,9 +55,9 @@ func TimeSaver(ctx context.Context, filename string, interval int, storage Metri
 		case <-ticker.C:
 			err := SaveDataToFile(filename, storage)
 			if err != nil {
-				logger.Log.Error().Msg("Ошибка при сохранении данных в файл" + err.Error())
+				logger.Log.Error().Msg("TimeSaver Ошибка при сохранении данных в файл" + err.Error())
 			} else {
-				logger.Log.Info().Msg("Сохранение данных в файл")
+				logger.Log.Info().Msg(" TimeSaver Сохранение данных в файл")
 			}
 		}
 	}

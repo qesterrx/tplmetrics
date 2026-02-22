@@ -16,9 +16,8 @@ type MemStorage struct {
 // Фабрика
 func NewMemStorage() *MemStorage {
 	mm := MemStorage{
-		storage:     make(map[string]model.Metrica),
-		keys:        make([]string, 0),
-		eventsQueue: make(chan string, 10000),
+		storage: make(map[string]model.Metrica),
+		keys:    make([]string, 0),
 	}
 
 	return &mm
@@ -46,7 +45,9 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 	if !ok {
 		ms.storage[key] = mtrk
 		ms.keys = append(ms.keys, key)
-		ms.eventsQueue <- "create"
+		if ms.eventsQueue != nil {
+			ms.eventsQueue <- "create"
+		}
 		return nil
 	}
 
@@ -54,7 +55,10 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 	if err != nil {
 		return err
 	}
-	ms.eventsQueue <- "update"
+
+	if ms.eventsQueue != nil {
+		ms.eventsQueue <- "update"
+	}
 
 	return nil
 
@@ -91,6 +95,7 @@ func (ms *MemStorage) Debug() {
 	}
 }
 
-func (ms *MemStorage) GetQueueEvents() chan string {
-	return ms.eventsQueue
+func (ms *MemStorage) GetQueueEvents() *chan string {
+	ms.eventsQueue = make(chan string, 10000)
+	return &ms.eventsQueue
 }
