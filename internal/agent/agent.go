@@ -13,11 +13,13 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
+var storage *SafeMap = NewSafeMap()
+
 /*
 По заданию не ясно как надо делать этого клиента.
 Все таки если мы опрашиваем метрики каждые N минут а отправляем реже - не понятно надо ли отправлять метрики gauge (мы же все равно будем сохранять толкьо последнее значение?)
 */
-func Collector(ctx context.Context, queue chan<- model.Metrica, pollInterval int) {
+func Collector(ctx context.Context, pollInterval int) {
 
 	logger.Log.Debug().Msg("Запуск Collector")
 
@@ -36,36 +38,37 @@ func Collector(ctx context.Context, queue chan<- model.Metrica, pollInterval int
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
 
-			queue <- model.NewMetricaGauge("Alloc", float64(m.Alloc))
-			queue <- model.NewMetricaGauge("BuckHashSys", float64(m.BuckHashSys))
-			queue <- model.NewMetricaGauge("Frees", float64(m.Frees))
-			queue <- model.NewMetricaGauge("GCCPUFraction", float64(m.GCCPUFraction))
-			queue <- model.NewMetricaGauge("GCSys", float64(m.GCSys))
-			queue <- model.NewMetricaGauge("HeapAlloc", float64(m.HeapAlloc))
-			queue <- model.NewMetricaGauge("HeapIdle", float64(m.HeapIdle))
-			queue <- model.NewMetricaGauge("HeapInuse", float64(m.HeapInuse))
-			queue <- model.NewMetricaGauge("HeapObjects", float64(m.HeapObjects))
-			queue <- model.NewMetricaGauge("HeapReleased", float64(m.HeapReleased))
-			queue <- model.NewMetricaGauge("HeapSys", float64(m.HeapSys))
-			queue <- model.NewMetricaGauge("LastGC", float64(m.LastGC))
-			queue <- model.NewMetricaGauge("Lookups", float64(m.Lookups))
-			queue <- model.NewMetricaGauge("MCacheInuse", float64(m.MCacheInuse))
-			queue <- model.NewMetricaGauge("MCacheSys", float64(m.MCacheSys))
-			queue <- model.NewMetricaGauge("MSpanInuse", float64(m.MSpanInuse))
-			queue <- model.NewMetricaGauge("MSpanSys", float64(m.MSpanSys))
-			queue <- model.NewMetricaGauge("Mallocs", float64(m.Mallocs))
-			queue <- model.NewMetricaGauge("NextGC", float64(m.NextGC))
-			queue <- model.NewMetricaGauge("NumForcedGC", float64(m.NumForcedGC))
-			queue <- model.NewMetricaGauge("NumGC", float64(m.NumGC))
-			queue <- model.NewMetricaGauge("OtherSys", float64(m.OtherSys))
-			queue <- model.NewMetricaGauge("PauseTotalNs", float64(m.PauseTotalNs))
-			queue <- model.NewMetricaGauge("StackInuse", float64(m.StackInuse))
-			queue <- model.NewMetricaGauge("StackSys", float64(m.StackSys))
-			queue <- model.NewMetricaGauge("Sys", float64(m.Sys))
-			queue <- model.NewMetricaGauge("TotalAlloc", float64(m.TotalAlloc))
+			storage.SetValue("Alloc", float64(m.Alloc))
+			storage.SetValue("BuckHashSys", float64(m.BuckHashSys))
+			storage.SetValue("Frees", float64(m.Frees))
+			storage.SetValue("GCCPUFraction", float64(m.GCCPUFraction))
+			storage.SetValue("GCSys", float64(m.GCSys))
+			storage.SetValue("HeapAlloc", float64(m.HeapAlloc))
+			storage.SetValue("HeapIdle", float64(m.HeapIdle))
+			storage.SetValue("HeapInuse", float64(m.HeapInuse))
+			storage.SetValue("HeapObjects", float64(m.HeapObjects))
+			storage.SetValue("HeapReleased", float64(m.HeapReleased))
+			storage.SetValue("HeapSys", float64(m.HeapSys))
+			storage.SetValue("LastGC", float64(m.LastGC))
+			storage.SetValue("Lookups", float64(m.Lookups))
+			storage.SetValue("MCacheInuse", float64(m.MCacheInuse))
+			storage.SetValue("MCacheSys", float64(m.MCacheSys))
+			storage.SetValue("MSpanInuse", float64(m.MSpanInuse))
+			storage.SetValue("MSpanSys", float64(m.MSpanSys))
+			storage.SetValue("Mallocs", float64(m.Mallocs))
+			storage.SetValue("NextGC", float64(m.NextGC))
+			storage.SetValue("NumForcedGC", float64(m.NumForcedGC))
+			storage.SetValue("NumGC", float64(m.NumGC))
+			storage.SetValue("OtherSys", float64(m.OtherSys))
+			storage.SetValue("PauseTotalNs", float64(m.PauseTotalNs))
+			storage.SetValue("StackInuse", float64(m.StackInuse))
+			storage.SetValue("StackSys", float64(m.StackSys))
+			storage.SetValue("Sys", float64(m.Sys))
+			storage.SetValue("TotalAlloc", float64(m.TotalAlloc))
 
-			queue <- model.NewMetricaGauge("RandomValue", float64(rand.ExpFloat64()))
-			queue <- model.NewMetricaCounter("PollCount", 1)
+			storage.SetValue("RandomValue", float64(rand.ExpFloat64()))
+
+			storage.AddDelta("PollCount", 1)
 
 			counter++
 
@@ -75,13 +78,35 @@ func Collector(ctx context.Context, queue chan<- model.Metrica, pollInterval int
 
 }
 
-func Sender(ctx context.Context, queue <-chan model.Metrica, reportInterval int, host string, clientErrorCount int) {
+func CallUpdateURI(client *resty.Client, host string, metrica model.Metrica) error {
+
+	url := fmt.Sprintf("http://%s/update/%s/%s/%s", host, metrica.Kind(), metrica.Name(), metrica.Value())
+	resp, err := client.R().
+		SetHeader("Content-Type", "text/plain").
+		Post(url)
+
+	if err != nil {
+		//Получили ошибку при выполнении запроса
+		return fmt.Errorf("Sender ошибка выполнения запроса %s", err.Error())
+	}
+
+	if resp.StatusCode() != http.StatusOK {
+		//Получили от сервера код который не ожидали
+		return fmt.Errorf("Sender сервер не принял сообщение StatusCode!=OK")
+	}
+
+	return nil
+}
+
+func SenderByURI(ctx context.Context, reportInterval int, host string, clientErrorCount int) {
 
 	logger.Log.Debug().Msg("Запуск Sender")
 
+	ticker := time.NewTicker(time.Second * time.Duration(reportInterval))
+	defer ticker.Stop()
+
 	client := resty.New()
 	clentErrorCounter := 0
-	countRequest := 0
 
 	for {
 		select {
@@ -89,41 +114,55 @@ func Sender(ctx context.Context, queue <-chan model.Metrica, reportInterval int,
 			//Если получили сигнал завершения останавливаемся
 			logger.Log.Debug().Msg("Остановка Sender по контексту")
 			return
-		case metrica := <-queue:
+		case <-ticker.C:
 
-			if clentErrorCounter > clientErrorCount {
-				//Если количество ошибок превысило лимит - завершаем работу
-				logger.Log.Error().Msg("Sender превышено допустимое количество ошибок отправки")
-				return
+			keys := storage.GetKeys()
+			for _, key := range keys {
+
+				if clentErrorCounter > clientErrorCount {
+					//Если количество ошибок превысило лимит - завершаем работу
+					logger.Log.Error().Msg("Sender превышено допустимое количество ошибок отправки")
+					return
+				}
+
+				//Метрики типа Value-Gauge
+				value, ok := storage.GetValue(key)
+				if ok {
+					mtrk := model.NewMetricaGauge(key, value)
+					err := CallUpdateURI(client, host, mtrk)
+					if err != nil {
+						logger.Log.Error().Msg(fmt.Sprintf("Ошибка обращения к серверу: %s", err.Error()))
+						clentErrorCounter++
+					}
+				}
+
+				//Метрики типа Delta-Counter Все приседание ради них
+				delta, ok := storage.StartGetDeltaWithLock(key)
+				if ok {
+					mtrk := model.NewMetricaCounter(key, delta)
+					err := CallUpdateURI(client, host, mtrk)
+					if err != nil {
+						//Сразу освобождаем блокировку, значение чистить не надо
+						storage.EndGetDeltaWithLock(false)
+						logger.Log.Error().Msg(fmt.Sprintf("Ошибка обращения к серверу: %s", err.Error()))
+						clentErrorCounter++
+					}
+					//Освобождаем блокировку, значение можно почистить
+					storage.EndGetDeltaWithLock(true)
+				}
+
+				//Вдруг у нас много метрик но пришла команда завершения по контексту
+				select {
+				case <-ctx.Done():
+					logger.Log.Error().Msg("Остановка Sender цикла по контексту")
+					return
+				default:
+				}
+
 			}
 
-			url := fmt.Sprintf("http://%s/update/%s/%s/%s", host, metrica.Kind(), metrica.Name(), metrica.Value())
-			resp, err := client.R().
-				SetHeader("Content-Type", "text/plain").
-				Post(url)
+			logger.Log.Debug().Msg("Sender все метрики отправлены")
 
-			if err != nil {
-				//Получили ошибку при выполнении запроса
-				logger.Log.Error().Msg(fmt.Sprintf("Sender ошибка выполнения запроса %s", err.Error()))
-				clentErrorCounter++
-				continue
-			}
-
-			if resp.StatusCode() != http.StatusOK {
-				//Получили от сервера код который не ожидали
-				logger.Log.Error().Msg("Sender сервер не принял сообщение StatusCode!=OK")
-				clentErrorCounter++
-				continue
-			}
-
-			countRequest++
-
-		default:
-			//Канал пуст, отправили все что было в канале а знчит засыпаем на reportInterval секунд
-			logger.Log.Debug().Msg(fmt.Sprintf("Метрики отправлены на сервер (%d)", countRequest))
-			countRequest = 0
-			time.Sleep(time.Second * time.Duration(reportInterval))
 		}
-
 	}
 }

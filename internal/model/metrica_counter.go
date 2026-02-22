@@ -1,6 +1,13 @@
 package model
 
-import "fmt"
+import (
+	"encoding/json"
+	"fmt"
+)
+
+func FormatMetricaCounter(value int64) string {
+	return fmt.Sprintf("%d", value)
+}
 
 type MetricaCounter struct {
 	name  string
@@ -37,6 +44,6 @@ func (m *MetricaCounter) UpdateValue(mtrk Metrica) error {
 	}
 }
 
-func FormatMetricaCounter(value int64) string {
-	return fmt.Sprintf("%d", value)
+func (m *MetricaCounter) MarshalJSON() ([]byte, error) {
+	return json.Marshal(MetricaJSONAdapter{Name: m.name, Kind: string(m.kind), Delta: &m.value})
 }

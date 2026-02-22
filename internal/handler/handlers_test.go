@@ -39,13 +39,6 @@ func TestUpdateMetric(t *testing.T) {
 			contentType: "text/plain",
 			statusCode:  http.StatusOK,
 		},
-		/*	{
-			name:        "WrongContentType",
-			url:         "/update/gauge/g1/1",
-			method:      http.MethodPost,
-			contentType: "json/application",
-			statusCode:  http.StatusBadRequest,
-		},*/
 		{
 			name:        "WrongMethod",
 			url:         "/update/gauge/g1/1",
@@ -82,8 +75,8 @@ func TestGetMetric(t *testing.T) {
 	storage.UpdateMetrica(model.NewMetricaCounter("c1", 5))
 	storage.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
 
-	valC, _ := storage.Metrica("c1")
-	valG, _ := storage.Metrica("g1")
+	valC, _ := storage.Metrica("c1", string(model.Counter))
+	valG, _ := storage.Metrica("g1", string(model.Gauge))
 
 	router := GetRouter(storage)
 
@@ -119,7 +112,7 @@ func TestGetMetric(t *testing.T) {
 			name:       "Not exists kind",
 			url:        "/value/wtf/g1",
 			method:     http.MethodGet,
-			statusCode: http.StatusBadRequest,
+			statusCode: http.StatusNotFound,
 			body:       "",
 		},
 		{
