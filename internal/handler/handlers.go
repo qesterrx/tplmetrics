@@ -59,11 +59,11 @@ func GetAllCurrentMetricsHandler(storage repository.MetricaStorage) http.Handler
 			Metric: metrics,
 		}
 
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+
 		t, _ := template.New("home").Parse(tmpl)
 		t.Execute(w, data)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
 	})
 }
 
