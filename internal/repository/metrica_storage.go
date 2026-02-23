@@ -20,29 +20,35 @@ type MetricaStorage interface {
 	AllMetrics() []model.Metrica
 	//Отладочный вызов
 	Debug()
-	//Очередь событий
-	GetQueueEvents() *chan string
+	//Очередь уведомлений по обновлениям данных для синхронной записи в файл
+	GetQueueUpdateEvents() *chan bool
 }
 
+// "Синхронная" запись в файл
+// На самом деле конечно не синхронная, если это будет проблемой прошу направить меня в сторону решения.
+// Записывать напрямую в структуре которая реализует интерфейс MetricaStorage мне показалось не правильным с точки зрения декомпозиции
 func EventSaver(ctx context.Context, filename string, storage MetricaStorage) {
 
-	queueEvent := *storage.GetQueueEvents()
+	//Получаем очередь из которой будем читать
+	queueEvent := *storage.GetQueueUpdateEvents()
 
 	for {
 		select {
 		case <-ctx.Done():
+			logger.Log.Debug().Msg("Завершение EventSaver по контексту")
 			return
 		case <-queueEvent:
 			err := SaveDataToFile(filename, storage)
 			if err != nil {
 				logger.Log.Error().Msg("EventSaver Ошибка при сохранении данных в файл" + err.Error())
 			} else {
-				logger.Log.Info().Msg("EventSaver Сохранение данных в файл")
+				logger.Log.Debug().Msg("EventSaver Данные сохранены в файл")
 			}
 		}
 	}
 }
 
+// Переодическая запись текущего состояния в файл
 func TimeSaver(ctx context.Context, filename string, interval int, storage MetricaStorage) {
 
 	ticker := time.NewTicker(time.Second * time.Duration(interval))
@@ -51,18 +57,20 @@ func TimeSaver(ctx context.Context, filename string, interval int, storage Metri
 	for {
 		select {
 		case <-ctx.Done():
+			logger.Log.Debug().Msg("Завершение TimeSaver по контексту")
 			return
 		case <-ticker.C:
 			err := SaveDataToFile(filename, storage)
 			if err != nil {
 				logger.Log.Error().Msg("TimeSaver Ошибка при сохранении данных в файл" + err.Error())
 			} else {
-				logger.Log.Info().Msg(" TimeSaver Сохранение данных в файл")
+				logger.Log.Debug().Msg(" TimeSaver Данные сохранены в файл")
 			}
 		}
 	}
 }
 
+// Функция сохранения данных в файл
 func SaveDataToFile(filename string, storage MetricaStorage) error {
 	mtrks := storage.AllMetrics()
 
@@ -79,6 +87,7 @@ func SaveDataToFile(filename string, storage MetricaStorage) error {
 	return nil
 }
 
+// Функция чтения сохраненных данных из файла в момент запуска сервера
 func LoadDataFromFile(filename string, storage MetricaStorage) error {
 
 	data, err := os.ReadFile(filename)

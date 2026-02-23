@@ -34,7 +34,7 @@ func main() {
 	if config.RestoreFromFileStorage {
 		err = repository.LoadDataFromFile(config.FileStorageName, storage)
 		if err != nil {
-			logger.Log.Error().Msg("LoadDataFromFile " + err.Error())
+			logger.Log.Error().Msg("Ошибка при загрузке даннных из файла  " + config.FileStorageName + ":" + err.Error())
 		}
 	}
 
@@ -44,7 +44,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.Log.Debug().Msg("Running StoreInterval")
+			logger.Log.Debug().Msg("Запуск EventSaver")
 			repository.EventSaver(ctx, config.FileStorageName, storage)
 			cancel()
 		}()
@@ -54,7 +54,7 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.Log.Debug().Msg("Running TimeSaver")
+			logger.Log.Debug().Msg("Запуск TimeSaver")
 			repository.TimeSaver(ctx, config.FileStorageName, config.StoreInterval, storage)
 			cancel()
 		}()
@@ -68,9 +68,9 @@ func main() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		logger.Log.Debug().Msg("Running server")
+		logger.Log.Debug().Msg("Запуск HttpServer")
 		err := server.ListenAndServe()
-		logger.Log.Error().Msg("ListenAndServe " + err.Error())
+		logger.Log.Error().Msg("Ошибка в работе сервера ListenAndServe:" + err.Error())
 		cancel()
 	}()
 
@@ -87,9 +87,9 @@ func main() {
 
 	// Пытаемся остановить сервер gracefully
 	if err := server.Shutdown(ctxShutdown); err != nil {
-		logger.Log.Error().Msg("Shutdown error:" + err.Error())
+		logger.Log.Error().Msg("Ошибка остановки работы сервера:" + err.Error())
 	}
 
-	logger.Log.Info().Msg("Shutdown server")
+	logger.Log.Info().Msg("Сервер HttpServer остановлен")
 	wg.Wait()
 }

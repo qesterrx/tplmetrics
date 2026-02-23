@@ -2,7 +2,7 @@ package model
 
 import "fmt"
 
-// Структура для общения между агентом и сервером
+// Структура для общения между агентом и сервером а так же для хранения данных в файле
 type MetricaJSONAdapter struct {
 	Name  string   `json:"id"`              // имя метрики
 	Kind  string   `json:"type"`            // параметр, принимающий значение gauge или counter
@@ -10,6 +10,7 @@ type MetricaJSONAdapter struct {
 	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
 }
 
+// Преобразуем данные к интерфейсу Metrica
 func (mtrk *MetricaJSONAdapter) Metrica() (Metrica, error) {
 	kindValue, err := GetKindValue(mtrk.Kind)
 	if err != nil {

@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"io"
 	"net/http"
 	"os"
 	"time"
@@ -8,7 +9,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-var Log zerolog.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
+var Log zerolog.Logger = zerolog.New(io.Discard)
 
 // Singleton
 func InitLogger() {

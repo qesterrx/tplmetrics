@@ -10,7 +10,7 @@ import (
 type MemStorage struct {
 	storage     map[string]model.Metrica
 	keys        []string
-	eventsQueue chan string
+	eventsQueue chan bool
 }
 
 // Фабрика
@@ -25,6 +25,8 @@ func NewMemStorage() *MemStorage {
 
 // Получение метрики по имени
 func (ms *MemStorage) Metrica(name string, kind string) (model.Metrica, error) {
+
+	//Так уж и быть поддержим одинаковые имена метрик разного типа
 	key := kind + "_" + name
 	mtrk, ok := ms.storage[key]
 
@@ -42,22 +44,18 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 	key := string(mtrk.Kind()) + "_" + mtrk.Name()
 
 	mtrkSaved, ok := ms.storage[key]
-	if !ok {
+	if ok {
+		err := mtrkSaved.UpdateValue(mtrk)
+		if err != nil {
+			return err
+		}
+	} else {
 		ms.storage[key] = mtrk
 		ms.keys = append(ms.keys, key)
-		if ms.eventsQueue != nil {
-			ms.eventsQueue <- "create"
-		}
-		return nil
-	}
-
-	err := mtrkSaved.UpdateValue(mtrk)
-	if err != nil {
-		return err
 	}
 
 	if ms.eventsQueue != nil {
-		ms.eventsQueue <- "update"
+		ms.eventsQueue <- true
 	}
 
 	return nil
@@ -95,7 +93,10 @@ func (ms *MemStorage) Debug() {
 	}
 }
 
-func (ms *MemStorage) GetQueueEvents() *chan string {
-	ms.eventsQueue = make(chan string, 10000)
+// Наша очередь с событиями, но что будет если ее никто не будет вычитывать?
+func (ms *MemStorage) GetQueueUpdateEvents() *chan bool {
+	if ms.eventsQueue == nil {
+		ms.eventsQueue = make(chan bool, 10000)
+	}
 	return &ms.eventsQueue
 }
