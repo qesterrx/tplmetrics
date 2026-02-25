@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
@@ -95,7 +94,7 @@ func CallServer(client *resty.Client, host string, metrica model.Metrica) error 
 
 	_, err = gzWriter.Write(body)
 	if err != nil {
-		log.Fatal("Error writing to gzip:", err)
+		return fmt.Errorf("CallServer ошибка компрессии gzip %s", err.Error())
 	}
 
 	// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
