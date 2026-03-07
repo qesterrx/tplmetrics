@@ -78,7 +78,7 @@ func NewPGStorage(ms *MemStorage, databaseDSN string, mode MetricaStorageMode) (
 		case model.Counter:
 			mtrk = model.NewMetricaCounter(name, delta)
 		default:
-			return nil, fmt.Errorf("При загрузке данных из БД обнаружен неизвестный тип метрики")
+			return nil, fmt.Errorf("при загрузке данных из БД обнаружен неизвестный тип метрики")
 		}
 
 		pgs.MemStorage.UpdateMetrica(mtrk)
@@ -187,7 +187,7 @@ func (pgs *PGStorage) sqlUpdtaeMetrica(mtrk model.Metrica) error {
 	case *model.MetricaGauge:
 		value = m.SrcValue()
 	default:
-		return fmt.Errorf("Неизвестный тип метрики в методе sqlUpdtaeMetrica")
+		return fmt.Errorf("неизвестный тип метрики в методе sqlUpdtaeMetrica")
 	}
 
 	_, err := pgs.pool.Exec(ctxto, `
