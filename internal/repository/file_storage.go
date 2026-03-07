@@ -1,0 +1,129 @@
+package repository
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+
+	"github.com/qesterrx/tplmetrics/internal/logger"
+	"github.com/qesterrx/tplmetrics/internal/model"
+)
+
+/**/
+
+type FileStorage struct {
+	MemStorage
+	filename   string
+	mode       MetricaStorageMode
+	restore    bool
+	hasChanged bool
+}
+
+// Фабрика
+func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, restore bool) (*FileStorage, error) {
+
+	//Проверяем существование файла, если файла нет надо его создать
+	_, err := os.Stat(filename)
+	if err != nil {
+		if os.IsNotExist(err) {
+			err := os.WriteFile(filename, []byte(""), 0666)
+			if err != nil {
+				return nil, fmt.Errorf("ошика создания файла %w", err)
+			}
+		}
+		return nil, fmt.Errorf("ошика открытия файла %w", err)
+	}
+
+	fs := FileStorage{
+		MemStorage: *ms,
+		mode:       mode,
+		hasChanged: false,
+		filename:   filename,
+		restore:    restore,
+	}
+
+	//Если необходимо восстановить данные из файла
+	if restore {
+
+		logger.Log.Debug().Msg("Загрузка данных из файла")
+
+		data, err := os.ReadFile(filename)
+		if err != nil {
+			return nil, err
+		}
+
+		arrMetrica := []model.MetricaJSONAdapter{}
+		err = json.Unmarshal(data, &arrMetrica)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, v := range arrMetrica {
+			mtrk, err := v.Metrica()
+			if err != nil {
+				return nil, err
+			}
+			fs.MemStorage.UpdateMetrica(mtrk)
+		}
+
+	}
+
+	return &fs, nil
+}
+
+// Получение метрики по имени
+func (fs *FileStorage) Metrica(name string, kind string) (model.Metrica, error) {
+	return fs.MemStorage.Metrica(name, kind)
+}
+
+// Обновление метрики
+func (fs *FileStorage) UpdateMetrica(mtrk model.Metrica) error {
+
+	err := fs.MemStorage.UpdateMetrica(mtrk)
+	if err != nil {
+		return err
+	}
+
+	fs.hasChanged = true
+	if fs.mode == MetricaStorageModeSync {
+		return fs.WriteMetrics()
+	} else {
+		return nil
+	}
+
+}
+
+// Получение всех сохраненных, с сортировкой по имени
+func (fs *FileStorage) AllMetrics() []model.Metrica {
+	return fs.MemStorage.AllMetrics()
+}
+
+// Показываем текущее состояние в output
+func (fs *FileStorage) Debug() {
+	fs.MemStorage.Debug()
+}
+
+// Наша очередь с событиями, но что будет если ее никто не будет вычитывать?
+func (fs *FileStorage) WriteMetrics() error {
+	if fs.hasChanged {
+
+		logger.Log.Debug().Msg("Синхронизация данных в файл")
+
+		mtrks := fs.MemStorage.AllMetrics()
+
+		bytes, err := json.Marshal(&mtrks)
+		if err != nil {
+			return err
+		}
+
+		err = os.WriteFile(fs.filename, bytes, 0666)
+		if err != nil {
+			return err
+		}
+
+		fs.hasChanged = false
+
+	}
+
+	return nil
+}

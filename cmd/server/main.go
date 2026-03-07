@@ -29,33 +29,35 @@ func main() {
 		panic(err)
 	}
 
-	storage := repository.NewMemStorage()
+	var storage repository.MetricaStorage
+	var mode repository.MetricaStorageMode
 
-	if config.RestoreFromFileStorage {
-		err = repository.LoadDataFromFile(config.FileStorageName, storage)
+	if config.StoreInterval == 0 {
+		mode = repository.MetricaStorageModeSync
+	} else {
+		mode = repository.MetricaStorageModeAsync
+	}
+
+	//Всегда создаем memStorage
+	memStorage := repository.NewMemStorage()
+
+	if config.FileStorageName != "" {
+		storage, err = repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
 		if err != nil {
 			logger.Log.Error().Msg("Ошибка при загрузке даннных из файла  " + config.FileStorageName + ":" + err.Error())
 		}
+	} else {
+		storage = memStorage
 	}
 
 	var wg sync.WaitGroup
 
-	if config.StoreInterval == 0 {
+	if mode == repository.MetricaStorageModeAsync {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.Log.Debug().Msg("Запуск EventSaver")
-			repository.EventSaver(ctx, config.FileStorageName, storage)
-			cancel()
-		}()
-	}
-
-	if config.StoreInterval > 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			logger.Log.Debug().Msg("Запуск TimeSaver")
-			repository.TimeSaver(ctx, config.FileStorageName, config.StoreInterval, storage)
+			logger.Log.Debug().Msg("Запуск TickerWriteMetrics")
+			repository.TickerWriteMetrics(ctx, storage, config.StoreInterval)
 			cancel()
 		}()
 	}

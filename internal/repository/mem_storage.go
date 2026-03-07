@@ -7,10 +7,11 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
+/*Базовая реализация интерфейса */
+
 type MemStorage struct {
-	storage     map[string]model.Metrica
-	keys        []string
-	eventsQueue chan bool
+	storage map[string]model.Metrica
+	keys    []string
 }
 
 // Фабрика
@@ -54,10 +55,6 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 		ms.keys = append(ms.keys, key)
 	}
 
-	if ms.eventsQueue != nil {
-		ms.eventsQueue <- true
-	}
-
 	return nil
 
 }
@@ -93,10 +90,7 @@ func (ms *MemStorage) Debug() {
 	}
 }
 
-// Наша очередь с событиями, но что будет если ее никто не будет вычитывать?
-func (ms *MemStorage) GetQueueUpdateEvents() *chan bool {
-	if ms.eventsQueue == nil {
-		ms.eventsQueue = make(chan bool, 10000)
-	}
-	return &ms.eventsQueue
+// По факту это заглушка т.к. memStorage некуда скидывать данные
+func (ms *MemStorage) WriteMetrics() error {
+	return nil
 }

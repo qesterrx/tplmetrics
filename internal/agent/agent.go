@@ -74,7 +74,7 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 
 }
 
-/*Процедура через reportInterval вычитывает очередь queue, группирует gauge метрики и ставит в очередь на отправку в виде []byte*/
+/*Процедура через reportInterval вычитывает очередь toGroup, группирует gauge метрики и ставит в очередь на отправку toSend в виде []byte*/
 func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- []byte, reportInterval int) {
 	logger.Log.Debug().Msg("Запуск Compressor")
 
