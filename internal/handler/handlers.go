@@ -1,12 +1,16 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"text/template"
 
 	"github.com/go-chi/chi"
+	"github.com/qesterrx/tplmetrics/internal/compression"
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
@@ -14,9 +18,14 @@ import (
 func GetRouter(storage repository.MetricaStorage) chi.Router {
 	r := chi.NewRouter()
 
+	r.Use(logger.LoggingMiddleware)
+	r.Use(compression.GzipCompressMiddleware)
+
 	r.Post(`/update/{kind}/{name}/{value}`, UpdateMetricaHandler(storage))
 	r.Get(`/value/{kind}/{name}`, GetMetricaHandler(storage))
 	r.Get(`/`, GetAllCurrentMetricsHandler(storage))
+	r.Post(`/update/`, UpdateMetricaJSONHandler(storage))
+	r.Post(`/value/`, GetMetricaJSONHandler(storage))
 
 	return r
 }
@@ -24,12 +33,12 @@ func GetRouter(storage repository.MetricaStorage) chi.Router {
 func GetAllCurrentMetricsHandler(storage repository.MetricaStorage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
-			//fmt.Printf("GetMetric, wrong methos, got %s \n", r.Method)
+			logger.Log.Info().Msg("GetAllCurrentMetricsHandler клиент обратился с ошибочным методом в запросе")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		metrics := storage.AllMetrica()
+		metrics := storage.AllMetrics()
 
 		tmpl := `
 		<html>
@@ -50,44 +59,30 @@ func GetAllCurrentMetricsHandler(storage repository.MetricaStorage) http.Handler
 			Metric: metrics,
 		}
 
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusOK)
+
 		t, _ := template.New("home").Parse(tmpl)
 		t.Execute(w, data)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
 	})
 }
 
+// Получение метрики по URI
 func GetMetricaHandler(ms repository.MetricaStorage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method != http.MethodGet {
-			//fmt.Printf("GetMetric, wrong methos, got %s \n", r.Method)
+			logger.Log.Info().Msg("GetMetricaHandler клиент обратился с ошибочным методом в запросе")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		kindSrc := strings.ToLower(chi.URLParam(r, "kind"))
-		kind, err := model.GetKindValue(kindSrc)
+		kind := strings.TrimSpace(chi.URLParam(r, "kind"))
+		name := strings.TrimSpace(chi.URLParam(r, "name"))
+		mtrk, err := ms.Metrica(name, kind)
 
 		if err != nil {
-			//fmt.Printf("UpdateMetric, error kind, got %s \n", kindSrc)
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		name := strings.ToLower(chi.URLParam(r, "name"))
-
-		mtrk, err := ms.Metrica(name)
-
-		if err != nil {
-			//fmt.Printf("GetMetric, error GetMetric,%e \n", err)
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-
-		if kind != mtrk.Kind() {
-			//fmt.Printf("GetMetric, error kind got %s current %s \n", kind, mtrk.Kind())
+			logger.Log.Info().Msg(fmt.Sprintf("GetMetricaHandler ошибка при получении метрики %s, %s: %s", kind, name, err.Error()))
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -98,48 +93,116 @@ func GetMetricaHandler(ms repository.MetricaStorage) http.HandlerFunc {
 	})
 }
 
+// Обновление значения метрики через URI
 func UpdateMetricaHandler(ms repository.MetricaStorage) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		if r.Method != http.MethodPost {
-			//fmt.Printf("UpdateMetric, wrong method, got %s \n", r.Method)
+			logger.Log.Info().Msg("UpdateMetricaHandler клиент обратился с ошибочным методом в запросе")
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		/*	if r.Header.Get("Content-Type") != "text/plain" {
-			fmt.Printf("UpdateMetric, wrong content-type, got %s \n", r.Header.Get("Content-Type"))
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}*/
-
-		kindSrc := strings.ToLower(chi.URLParam(r, "kind"))
-		kind, err := model.GetKindValue(kindSrc)
-
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-
-		name := strings.ToLower(chi.URLParam(r, "name"))
+		kind := strings.TrimSpace(chi.URLParam(r, "kind"))
+		name := strings.TrimSpace(chi.URLParam(r, "name"))
 		value := strings.TrimSpace(chi.URLParam(r, "value"))
 
 		mtrk, err := model.NewMetrica(name, kind, value)
 		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaHandler ошибка создания метрики %s, %s, %s : %s", name, kind, value, err.Error()))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
 		err = ms.UpdateMetrica(mtrk)
-
 		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaHandler ошибка при обновлении метрики %s, %s, %s : %s", name, kind, value, err.Error()))
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 
-		//ms.ShowDebug()
-
 		w.WriteHeader(http.StatusOK)
+
+	})
+}
+
+// Обновление значения метрики через json
+func UpdateMetricaJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" || r.ContentLength == 0 {
+			logger.Log.Info().Msg("UpdateMetricaJSONHandler клиент обратился с ошибочным методом в запросе")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mtrkJSON := model.MetricaJSONAdapter{}
+		err := json.NewDecoder(r.Body).Decode(&mtrkJSON)
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaJSONHandler ошибка разбора JSON: %s", err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mtrk, err := mtrkJSON.Metrica()
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaJSONHandler ошибка преобразования метрики %v : %s", mtrkJSON, err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		err = ms.UpdateMetrica(mtrk)
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaJSONHandler ошибка при обновлении метрики %s : %s", mtrk, err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte("{}"))
+
+	})
+}
+
+// Получение значения метрики через json
+func GetMetricaJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" || r.ContentLength == 0 {
+			logger.Log.Info().Msg("GetMetricaJSONHandler клиент обратился с ошибочным методом в запросе")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mtrkJSON := model.MetricaJSONAdapter{}
+		err := json.NewDecoder(r.Body).Decode(&mtrkJSON)
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("GetMetricaJSONHandler ошибка разбора JSON: %s", err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mtrk, err := ms.Metrica(mtrkJSON.Name, mtrkJSON.Kind)
+
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("GetMetricaJSONHandler ошибка при получении метрики %s, %s: %s", mtrkJSON.Name, mtrkJSON.Kind, err.Error()))
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+
+		body, err := json.Marshal(&mtrk)
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("GetMetricaJSONHandler сериализации метрики %s: %s", mtrk, err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		w.Write(body)
 
 	})
 }

@@ -1,9 +1,14 @@
 package model
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 )
+
+func FormatMetricaGauge(value float64) string {
+	return strings.TrimRight(fmt.Sprintf("%.3f", value), "0")
+}
 
 type MetricaGauge struct {
 	name  string
@@ -40,6 +45,6 @@ func (m *MetricaGauge) UpdateValue(mtrk Metrica) error {
 	}
 }
 
-func FormatMetricaGauge(value float64) string {
-	return strings.TrimRight(fmt.Sprintf("%.3f", value), "0")
+func (m *MetricaGauge) MarshalJSON() ([]byte, error) {
+	return json.Marshal(MetricaJSONAdapter{Name: m.name, Kind: string(m.kind), Value: &m.value})
 }
