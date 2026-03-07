@@ -35,6 +35,10 @@ func (m *MetricaCounter) Value() string {
 	return FormatMetricaCounter(m.value)
 }
 
+func (m *MetricaCounter) SrcValue() int64 {
+	return m.value
+}
+
 func (m *MetricaCounter) UpdateValue(mtrk Metrica) error {
 	if v, ok := mtrk.(*MetricaCounter); ok {
 		m.value = m.value + v.value

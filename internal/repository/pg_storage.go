@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -10,13 +10,12 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
-/**/
+/*Реализация интерфейса MetricaStorage для хранения данных в БД PostgreSQL*/
 
 type PGStorage struct {
 	MemStorage
 	databaseDSN string
 	mode        MetricaStorageMode
-	restore     bool
 	hasChanged  bool
 	pool        *pgxpool.Pool
 }
@@ -25,8 +24,8 @@ type PGStorage struct {
 func NewPGStorage(ms *MemStorage, databaseDSN string, mode MetricaStorageMode) (*PGStorage, error) {
 
 	logger.Log.Debug().Msg("Создание PGStorage")
-	//На подключение к БД  и пингдаем 5 секунд
-	ctxto, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	//На подключение к БД, пинг, загрузку данных даем 10 секунд
+	ctxto, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	//Коннект
@@ -50,6 +49,46 @@ func NewPGStorage(ms *MemStorage, databaseDSN string, mode MetricaStorageMode) (
 	}
 
 	//Загружаем данные по сохраненным метрикам
+	rows, err := pool.Query(ctxto, "select id, kind, delta, value from metrics")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var name string
+		var kindSrc string
+		var delta int64
+		var value float64
+
+		err = rows.Scan(&name, &kindSrc, &delta, &value)
+		if err != nil {
+			return nil, err
+		}
+
+		kind, err := model.GetKindValue(kindSrc)
+		if err != nil {
+			return nil, err
+		}
+
+		var mtrk model.Metrica
+		switch kind {
+		case model.Gauge:
+			mtrk = model.NewMetricaGauge(name, value)
+		case model.Counter:
+			mtrk = model.NewMetricaCounter(name, delta)
+		default:
+			return nil, fmt.Errorf("При загрузке данных из БД обнаружен неизвестный тип метрики")
+		}
+
+		pgs.MemStorage.UpdateMetrica(mtrk)
+	}
+
+	// проверяем на ошибки - не понял зачем это?
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
 
 	return &pgs, nil
 }
@@ -68,6 +107,7 @@ func (pgs *PGStorage) Close() {
 
 // Получение метрики по имени
 func (pgs *PGStorage) Metrica(name string, kind string) (model.Metrica, error) {
+	//т.к. в памяти у нас хеш то тут напрямую к БД не обращаемся
 	return pgs.MemStorage.Metrica(name, kind)
 }
 
@@ -80,7 +120,11 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 	}
 
 	if pgs.mode == MetricaStorageModeSync {
-		return pgs.WriteMetrics() //Нет смысла записывать все метрики
+		m, err := pgs.MemStorage.Metrica(mtrk.Name(), string(mtrk.Kind()))
+		if err != nil {
+			return err
+		}
+		return pgs.sqlUpdtaeMetrica(m)
 	} else {
 		pgs.hasChanged = true
 		return nil
@@ -98,23 +142,20 @@ func (pgs *PGStorage) Debug() {
 	pgs.MemStorage.Debug()
 }
 
-// Сбро сданных из памяти в БД
+// Сброc сданных из памяти в БД
 func (pgs *PGStorage) WriteMetrics() error {
+
 	if pgs.hasChanged {
 
-		logger.Log.Debug().Msg("Синхронизация данных в файл")
+		logger.Log.Debug().Msg("Синхронизация данных в БД")
 
 		mtrks := pgs.MemStorage.AllMetrics()
-
-		_, err := json.Marshal(&mtrks)
-		if err != nil {
-			return err
+		for _, mtrk := range mtrks {
+			err := pgs.sqlUpdtaeMetrica(mtrk)
+			if err != nil {
+				return err
+			}
 		}
-
-		/*err = os.WriteFile(fs.filename, bytes, 0666)
-		if err != nil {
-			return err
-		}*/
 
 		pgs.hasChanged = false
 
@@ -128,4 +169,39 @@ func (pgs *PGStorage) PingDB() error {
 	ctxto, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	return pgs.pool.Ping(ctxto)
+}
+
+// функция для обновления метрики
+func (pgs *PGStorage) sqlUpdtaeMetrica(mtrk model.Metrica) error {
+
+	ctxto, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	var value float64
+	var delta int64
+
+	//Ну вот и все.. все-таки пришлось использовать type assertion хотя я всеми силами пытался этого избежать
+	switch m := mtrk.(type) {
+	case *model.MetricaCounter:
+		delta = m.SrcValue()
+	case *model.MetricaGauge:
+		value = m.SrcValue()
+	default:
+		return fmt.Errorf("Неизвестный тип метрики в методе sqlUpdtaeMetrica")
+	}
+
+	_, err := pgs.pool.Exec(ctxto, `
+INSERT INTO metrics (id, kind, delta, value, updated)
+VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+ON CONFLICT (id, kind)
+DO UPDATE SET
+    delta = EXCLUDED.delta,
+    value = EXCLUDED.value,
+    updated = EXCLUDED.updated`, mtrk.Name(), mtrk.Kind(), delta, value)
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

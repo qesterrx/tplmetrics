@@ -8,7 +8,7 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
-/*Базовая реализация интерфейса */
+/*Базовая реализация интерфейса MetricaStorage*/
 
 type MemStorage struct {
 	storage map[string]model.Metrica

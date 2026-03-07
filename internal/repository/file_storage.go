@@ -9,7 +9,7 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
-/**/
+/*Реализация интерфейса MetricaStorage для хранения данных в файле*/
 
 type FileStorage struct {
 	MemStorage
@@ -113,7 +113,7 @@ func (fs *FileStorage) Debug() {
 	fs.MemStorage.Debug()
 }
 
-// Наша очередь с событиями, но что будет если ее никто не будет вычитывать?
+// Метод для записи данных в хранилище
 func (fs *FileStorage) WriteMetrics() error {
 	if fs.hasChanged {
 

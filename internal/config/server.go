@@ -13,6 +13,7 @@ type ConfigServer struct {
 	FileStorageName        string
 	RestoreFromFileStorage bool
 	DatabaseDSN            string
+	DatabaseURL            string
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -63,6 +64,25 @@ func ParseParamsServer() (*ConfigServer, error) {
 
 	if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
 		cfg.DatabaseDSN = envDatabaseDSN
+	}
+
+	//Перевод
+	if cfg.DatabaseDSN != "" {
+		var host string
+		var user string
+		var password string
+		var dbname string
+		var sslmode string
+
+		_, err := fmt.Sscanf(cfg.DatabaseDSN, "host=%s user=%s password=%s dbname=%s sslmode=%s", &host, &user, &password, &dbname, &sslmode)
+		if err != nil {
+			cfg.DatabaseURL = ""
+		} else {
+			cfg.DatabaseURL = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", user, password, host, dbname, sslmode)
+		}
+
+		fmt.Println(cfg.DatabaseURL)
+
 	}
 
 	return &cfg, nil

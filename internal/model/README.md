@@ -8,3 +8,4 @@
 2. Доработка в фабрику метрик NewMetrica
 3. Доработка в GetKindValue
 4. Доработка в MetricaJSON.Metrica()
+5. Доработка в PGStorage т.к. там есть type assertion

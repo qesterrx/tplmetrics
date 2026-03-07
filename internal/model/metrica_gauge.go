@@ -36,6 +36,10 @@ func (m *MetricaGauge) Value() string {
 	return FormatMetricaGauge(m.value)
 }
 
+func (m *MetricaGauge) SrcValue() float64 {
+	return m.value
+}
+
 func (m *MetricaGauge) UpdateValue(mtrk Metrica) error {
 	if v, ok := mtrk.(*MetricaGauge); ok {
 		m.value = v.value

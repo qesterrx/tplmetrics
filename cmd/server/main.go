@@ -9,16 +9,19 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 	"github.com/rs/zerolog"
+
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 )
 
 func main() {
 	if err := run(); err != nil {
-
 		panic(err)
 	}
 }
@@ -29,7 +32,7 @@ func run() error {
 	defer cancel()
 
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
@@ -49,7 +52,21 @@ func run() error {
 	//Всегда создаем memStorage
 	memStorage := repository.NewMemStorage()
 
+	//Дальше пытаемся подобрать реальный Storage по параметрам
 	if config.DatabaseDSN != "" {
+		//Хранение в БД постгри
+
+		//Сначала запускаем миграции
+		if config.DatabaseURL != "" {
+			m, err := migrate.New("file://migrations", config.DatabaseURL)
+			if err != nil {
+				return err
+			}
+
+			if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+				return err
+			}
+		}
 
 		pgStorage, err := repository.NewPGStorage(memStorage, config.DatabaseDSN, mode)
 		if err != nil {
@@ -60,7 +77,7 @@ func run() error {
 		storage = pgStorage
 
 	} else if config.FileStorageName != "" {
-
+		//Хранение в файле
 		fileStorage, err := repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
 		if err != nil {
 			logger.Log.Error().Err(err)
@@ -70,7 +87,7 @@ func run() error {
 		storage = fileStorage
 
 	} else {
-
+		//Хранение в памяти
 		storage = memStorage
 
 	}
@@ -78,6 +95,7 @@ func run() error {
 	var wg sync.WaitGroup
 
 	//На самом деле этот кусочек имеет смысл только если у storage есть куда сохранять данные
+	//А вообще конечно передаю привет тому извращенцу который придумал эту логику, а так же наставикам курса которые не могут сказать как это предпологалось сделать
 	if mode == repository.MetricaStorageModeAsync {
 		wg.Add(1)
 		go func() {
