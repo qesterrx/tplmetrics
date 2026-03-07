@@ -5,7 +5,6 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
-	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
@@ -16,13 +15,8 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
-var storage *SafeMap = NewSafeMap()
-
-/*
-По заданию не ясно как надо делать этого клиента.
-Все таки если мы опрашиваем метрики каждые N минут а отправляем реже - не понятно надо ли отправлять метрики gauge (мы же все равно будем сохранять толкьо последнее значение?)
-*/
-func Collector(ctx context.Context, pollInterval int) {
+/*Процедура собирает метрики через интервал pollInterval, записывает в очередь queue*/
+func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval int) {
 
 	logger.Log.Debug().Msg("Запуск Collector")
 
@@ -41,37 +35,36 @@ func Collector(ctx context.Context, pollInterval int) {
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
 
-			storage.SetValue("Alloc", float64(m.Alloc))
-			storage.SetValue("BuckHashSys", float64(m.BuckHashSys))
-			storage.SetValue("Frees", float64(m.Frees))
-			storage.SetValue("GCCPUFraction", float64(m.GCCPUFraction))
-			storage.SetValue("GCSys", float64(m.GCSys))
-			storage.SetValue("HeapAlloc", float64(m.HeapAlloc))
-			storage.SetValue("HeapIdle", float64(m.HeapIdle))
-			storage.SetValue("HeapInuse", float64(m.HeapInuse))
-			storage.SetValue("HeapObjects", float64(m.HeapObjects))
-			storage.SetValue("HeapReleased", float64(m.HeapReleased))
-			storage.SetValue("HeapSys", float64(m.HeapSys))
-			storage.SetValue("LastGC", float64(m.LastGC))
-			storage.SetValue("Lookups", float64(m.Lookups))
-			storage.SetValue("MCacheInuse", float64(m.MCacheInuse))
-			storage.SetValue("MCacheSys", float64(m.MCacheSys))
-			storage.SetValue("MSpanInuse", float64(m.MSpanInuse))
-			storage.SetValue("MSpanSys", float64(m.MSpanSys))
-			storage.SetValue("Mallocs", float64(m.Mallocs))
-			storage.SetValue("NextGC", float64(m.NextGC))
-			storage.SetValue("NumForcedGC", float64(m.NumForcedGC))
-			storage.SetValue("NumGC", float64(m.NumGC))
-			storage.SetValue("OtherSys", float64(m.OtherSys))
-			storage.SetValue("PauseTotalNs", float64(m.PauseTotalNs))
-			storage.SetValue("StackInuse", float64(m.StackInuse))
-			storage.SetValue("StackSys", float64(m.StackSys))
-			storage.SetValue("Sys", float64(m.Sys))
-			storage.SetValue("TotalAlloc", float64(m.TotalAlloc))
+			toGroup <- model.NewMetricaGauge("Alloc", float64(m.Alloc))
+			toGroup <- model.NewMetricaGauge("BuckHashSys", float64(m.BuckHashSys))
+			toGroup <- model.NewMetricaGauge("Frees", float64(m.Frees))
+			toGroup <- model.NewMetricaGauge("GCCPUFraction", float64(m.GCCPUFraction))
+			toGroup <- model.NewMetricaGauge("GCSys", float64(m.GCSys))
+			toGroup <- model.NewMetricaGauge("HeapAlloc", float64(m.HeapAlloc))
+			toGroup <- model.NewMetricaGauge("HeapIdle", float64(m.HeapIdle))
+			toGroup <- model.NewMetricaGauge("HeapInuse", float64(m.HeapInuse))
+			toGroup <- model.NewMetricaGauge("HeapObjects", float64(m.HeapObjects))
+			toGroup <- model.NewMetricaGauge("HeapReleased", float64(m.HeapReleased))
+			toGroup <- model.NewMetricaGauge("HeapSys", float64(m.HeapSys))
+			toGroup <- model.NewMetricaGauge("LastGC", float64(m.LastGC))
+			toGroup <- model.NewMetricaGauge("Lookups", float64(m.Lookups))
+			toGroup <- model.NewMetricaGauge("MCacheInuse", float64(m.MCacheInuse))
+			toGroup <- model.NewMetricaGauge("MCacheSys", float64(m.MCacheSys))
+			toGroup <- model.NewMetricaGauge("MSpanInuse", float64(m.MSpanInuse))
+			toGroup <- model.NewMetricaGauge("MSpanSys", float64(m.MSpanSys))
+			toGroup <- model.NewMetricaGauge("Mallocs", float64(m.Mallocs))
+			toGroup <- model.NewMetricaGauge("NextGC", float64(m.NextGC))
+			toGroup <- model.NewMetricaGauge("NumForcedGC", float64(m.NumForcedGC))
+			toGroup <- model.NewMetricaGauge("NumGC", float64(m.NumGC))
+			toGroup <- model.NewMetricaGauge("OtherSys", float64(m.OtherSys))
+			toGroup <- model.NewMetricaGauge("PauseTotalNs", float64(m.PauseTotalNs))
+			toGroup <- model.NewMetricaGauge("StackInuse", float64(m.StackInuse))
+			toGroup <- model.NewMetricaGauge("StackSys", float64(m.StackSys))
+			toGroup <- model.NewMetricaGauge("Sys", float64(m.Sys))
+			toGroup <- model.NewMetricaGauge("TotalAlloc", float64(m.TotalAlloc))
 
-			storage.SetValue("RandomValue", float64(rand.ExpFloat64()))
-
-			storage.AddDelta("PollCount", 1)
+			toGroup <- model.NewMetricaGauge("RandomValue", float64(rand.ExpFloat64()))
+			toGroup <- model.NewMetricaCounter("PollCount", 1)
 
 			counter++
 
@@ -81,51 +74,77 @@ func Collector(ctx context.Context, pollInterval int) {
 
 }
 
-func CallServer(client *resty.Client, host string, metrica model.Metrica) error {
-
-	body, err := json.Marshal(metrica)
-	if err != nil {
-		return fmt.Errorf("CallServer ошибка сериализация метрики %s", err.Error())
-	}
-
-	var compressed bytes.Buffer
-
-	gzWriter := gzip.NewWriter(&compressed)
-
-	_, err = gzWriter.Write(body)
-	if err != nil {
-		return fmt.Errorf("CallServer ошибка компрессии gzip %s", err.Error())
-	}
-
-	// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
-	gzWriter.Close()
-
-	url := fmt.Sprintf("http://%s/update/", host)
-	resp, err := client.R().
-		SetHeader("Content-Encoding", "gzip").
-		SetHeader("Content-Type", "application/json").
-		SetBody(compressed.Bytes()).
-		Post(url)
-
-	if err != nil {
-		//Получили ошибку при выполнении запроса
-		return fmt.Errorf("CallServer ошибка выполнения запроса %s", err.Error())
-	}
-
-	if resp.StatusCode() != http.StatusOK {
-		//Получили от сервера код который не ожидали
-		return fmt.Errorf("CallServer сервер не принял сообщение StatusCode!=OK")
-	}
-
-	return nil
-}
-
-func Sender(ctx context.Context, reportInterval int, host string, clientErrorCount int) {
-
-	logger.Log.Debug().Msg("Запуск Sender")
+/*Процедура через reportInterval вычитывает очередь queue, группирует gauge метрики и ставит в очередь на отправку в виде []byte*/
+func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- []byte, reportInterval int) {
+	logger.Log.Debug().Msg("Запуск Compressor")
 
 	ticker := time.NewTicker(time.Second * time.Duration(reportInterval))
 	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			//Если получили сигнал завершения останавливаемся
+			logger.Log.Debug().Msg("Остановка Compressor по контексту")
+			return
+		case <-ticker.C:
+
+			logger.Log.Debug().Msg("Compressor запуск группировки данных из очереди toGroup")
+			groupMap := map[string]model.Metrica{}
+
+		loop:
+			for {
+				select {
+				case <-ctx.Done():
+					//Если получили сигнал завершения останавливаемся
+					logger.Log.Debug().Msg("Остановка Compressor по контексту")
+					return
+				case metrica := <-toGroup:
+					//Группировка
+					switch metrica.Kind() {
+					case model.Gauge:
+						groupMap[metrica.Name()] = metrica
+					case model.Counter:
+						oldMetrica, ok := groupMap[metrica.Name()]
+						if ok {
+							err := oldMetrica.UpdateValue(metrica)
+							if err != nil {
+								logger.Log.Error().Msg("Ошибка обновления метрики " + err.Error())
+								continue
+							}
+						} else {
+							groupMap[metrica.Name()] = metrica
+						}
+					default:
+						logger.Log.Error().Msg("Неизвестный тип метрики " + metrica.Name() + string(metrica.Kind()))
+					}
+				default:
+					//Канал вычитан до конца - выходим из цикла
+					break loop
+				}
+			}
+
+			//Сериализация и ставим в очередь на отправку
+			for _, metrica := range groupMap {
+				body, err := json.Marshal(metrica)
+				if err != nil {
+					logger.Log.Error().Msg("Ошибка сериализации метрики " + err.Error())
+					continue
+				}
+
+				logger.Log.Debug().Msg("В очередь на отправку добавлена метрика " + metrica.Name() + ":" + string(metrica.Kind()) + ":" + metrica.Value())
+				toSend <- body
+
+			}
+
+		}
+	}
+
+}
+
+/*Процедура отвечает только за отправку уже сериализованных данных, отправляет сразу же как в toSend появляются данные*/
+func Sender(ctx context.Context, url string, toSend <-chan []byte) {
+	logger.Log.Debug().Msg("Запуск Sender")
 
 	client := resty.New()
 	clentErrorCounter := 0
@@ -136,51 +155,48 @@ func Sender(ctx context.Context, reportInterval int, host string, clientErrorCou
 			//Если получили сигнал завершения останавливаемся
 			logger.Log.Debug().Msg("Остановка Sender по контексту")
 			return
-		case <-ticker.C:
+		case srcBody := <-toSend:
+			var compressed bytes.Buffer
 
-			keys := storage.GetKeys()
-			for _, key := range keys {
+			gzWriter := gzip.NewWriter(&compressed)
 
-				if clentErrorCounter > clientErrorCount {
-					//Если количество ошибок превысило лимит - завершаем работу
-					logger.Log.Error().Msg("Sender превышено допустимое количество ошибок отправки")
-					return
-				}
-
-				//Метрики типа Value-Gauge
-				value, ok := storage.GetValue(key)
-				if ok {
-					mtrk := model.NewMetricaGauge(key, value)
-					err := CallServer(client, host, mtrk)
-					if err != nil {
-						logger.Log.Error().Msg(fmt.Sprintf("Sender MetricaGauge ошибка обращения к серверу: %s", err.Error()))
-						clentErrorCounter++
-					}
-				}
-
-				//Метрики типа Delta-Counter Все приседание ради них
-				delta, ok := storage.GetDelta(key)
-				if ok {
-					mtrk := model.NewMetricaCounter(key, delta)
-					err := CallServer(client, host, mtrk)
-					if err != nil {
-						logger.Log.Error().Msg(fmt.Sprintf("Sender MetricaCounter ошибка обращения к серверу: %s", err.Error()))
-						clentErrorCounter++
-					}
-				}
-
-				//Вдруг у нас много метрик но пришла команда завершения по контексту
-				select {
-				case <-ctx.Done():
-					logger.Log.Error().Msg("Остановка Sender цикла по контексту")
-					return
-				default:
-				}
-
+			_, err := gzWriter.Write(srcBody)
+			if err != nil {
+				logger.Log.Error().Msg("Sender ошибка компрессии gzip " + err.Error())
+				clentErrorCounter++
+				continue
 			}
 
-			logger.Log.Debug().Msg("Sender все метрики отправлены")
+			// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
+			gzWriter.Close()
 
+			resp, err := client.R().
+				SetHeader("Content-Encoding", "gzip").
+				SetHeader("Content-Type", "application/json").
+				SetBody(compressed.Bytes()).
+				Post(url)
+
+			if err != nil {
+				//Получили ошибку при выполнении запроса
+				logger.Log.Error().Msg("Sender ошибка выполнения запроса на сервер " + err.Error())
+				clentErrorCounter++
+				continue
+			}
+
+			if resp.StatusCode() != http.StatusOK {
+				//Получили от сервера код который не ожидали
+				logger.Log.Error().Msg("Sender сервер не принял сообщение StatusCode!=OK")
+				clentErrorCounter++
+				continue
+			}
+
+			logger.Log.Debug().Msg("Успешная отправка: " + string(srcBody))
 		}
 	}
 }
+
+/*Хм все таки насколько критично то что метрики не дошли до сервера?
+Я ушел от сейвМапы потому что подход мне не нравился, хотя наверное он был и ничего
+Сейчас при ошибке отправки я получается теряю запись о обновлении метрики
+Может быть для Gauge это не критично, но вот Counter при ошибке во времени отправки сразу начнет брехать и со временем это может стать значимо
+Все таки какой путь тут выбрать? очень нужен комментарий!*/
