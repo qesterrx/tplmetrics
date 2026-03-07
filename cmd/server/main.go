@@ -17,6 +17,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		panic(err)
+	}
+}
+
+func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -26,7 +32,7 @@ func main() {
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	var storage repository.MetricaStorage
@@ -41,17 +47,33 @@ func main() {
 	//Всегда создаем memStorage
 	memStorage := repository.NewMemStorage()
 
-	if config.FileStorageName != "" {
-		storage, err = repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
+	if config.DatabaseDSN != "" {
+
+		pgStorage, err := repository.NewPGStorage(memStorage, config.DatabaseDSN, mode)
 		if err != nil {
-			logger.Log.Error().Msg("Ошибка при загрузке даннных из файла  " + config.FileStorageName + ":" + err.Error())
+			return err
 		}
+		defer pgStorage.Close()
+		storage = pgStorage
+
+	} else if config.FileStorageName != "" {
+
+		fileStorage, err := repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
+		if err != nil {
+			return err
+		}
+		defer fileStorage.Close()
+		storage = fileStorage
+
 	} else {
+
 		storage = memStorage
+
 	}
 
 	var wg sync.WaitGroup
 
+	//На самом деле этот кусочек имеет смысл только если у storage есть куда сохранять данные
 	if mode == repository.MetricaStorageModeAsync {
 		wg.Add(1)
 		go func() {
@@ -72,7 +94,10 @@ func main() {
 		defer wg.Done()
 		logger.Log.Debug().Msg("Запуск HttpServer")
 		err := server.ListenAndServe()
-		logger.Log.Error().Msg("Ошибка в работе сервера ListenAndServe:" + err.Error())
+		if ctx.Err() == nil {
+			//Ошибку отображаем только если контекст не завершен
+			logger.Log.Error().Msg("Ошибка в работе сервера ListenAndServe:" + err.Error())
+		}
 		cancel()
 	}()
 
@@ -94,4 +119,6 @@ func main() {
 
 	logger.Log.Info().Msg("Сервер HttpServer остановлен")
 	wg.Wait()
+
+	return nil
 }

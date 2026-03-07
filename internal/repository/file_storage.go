@@ -22,6 +22,7 @@ type FileStorage struct {
 // Фабрика
 func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, restore bool) (*FileStorage, error) {
 
+	logger.Log.Debug().Msg("Создание FileStorage")
 	//Проверяем существование файла, если файла нет надо его создать
 	_, err := os.Stat(filename)
 	if err != nil {
@@ -69,6 +70,16 @@ func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, re
 	}
 
 	return &fs, nil
+}
+
+// Завершаем работу с файлом
+func (fs *FileStorage) Close() {
+	logger.Log.Debug().Msg("Закрытие FileStorage")
+
+	err := fs.WriteMetrics()
+	if err != nil {
+		logger.Log.Debug().Msg("Ошибка сохранения данных FileStorage " + err.Error())
+	}
 }
 
 // Получение метрики по имени

@@ -12,6 +12,7 @@ type ConfigServer struct {
 	StoreInterval          int
 	FileStorageName        string
 	RestoreFromFileStorage bool
+	DatabaseDSN            string
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -24,6 +25,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 	fs.IntVar(&cfg.StoreInterval, "i", 300, "StoreInterval - time in sec after which data would be save in file")
 	fs.StringVar(&cfg.FileStorageName, "f", "TempFileStorage", "filename for soraging data")
 	fs.BoolVar(&cfg.RestoreFromFileStorage, "r", false, "Load data from file on start")
+	fs.StringVar(&cfg.DatabaseDSN, "d", "", "Connection string for postgresql")
 
 	fs.Parse(os.Args[1:])
 
@@ -57,6 +59,10 @@ func ParseParamsServer() (*ConfigServer, error) {
 		} else {
 			cfg.RestoreFromFileStorage = false
 		}
+	}
+
+	if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
+		cfg.DatabaseDSN = envDatabaseDSN
 	}
 
 	return &cfg, nil

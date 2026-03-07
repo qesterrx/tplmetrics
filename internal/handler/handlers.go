@@ -21,13 +21,39 @@ func GetRouter(storage repository.MetricaStorage) chi.Router {
 	r.Use(logger.LoggingMiddleware)
 	r.Use(compression.GzipCompressMiddleware)
 
-	r.Post(`/update/{kind}/{name}/{value}`, UpdateMetricaHandler(storage))
 	r.Get(`/value/{kind}/{name}`, GetMetricaHandler(storage))
 	r.Get(`/`, GetAllCurrentMetricsHandler(storage))
+	r.Get(`/ping`, PingDBHandler(storage))
+	r.Post(`/update/{kind}/{name}/{value}`, UpdateMetricaHandler(storage))
 	r.Post(`/update/`, UpdateMetricaJSONHandler(storage))
 	r.Post(`/value/`, GetMetricaJSONHandler(storage))
 
 	return r
+}
+
+func PingDBHandler(storage repository.MetricaStorage) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			logger.Log.Info().Msg("PingDBHandler клиент обратился с ошибочным методом в запросе")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if PGStorage, ok := storage.(*repository.PGStorage); ok {
+			err := PGStorage.PingDB()
+			if err != nil {
+				logger.Log.Error().Msg("PingDBHandler не удалось выполнить Ping DB")
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+
+		} else {
+			logger.Log.Info().Msg("PingDBHandler сервер запущен без работы с БД, метод не поддерживается")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+	})
 }
 
 func GetAllCurrentMetricsHandler(storage repository.MetricaStorage) http.HandlerFunc {

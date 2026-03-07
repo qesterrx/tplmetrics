@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
@@ -16,6 +17,7 @@ type MemStorage struct {
 
 // Фабрика
 func NewMemStorage() *MemStorage {
+	logger.Log.Debug().Msg("Создание MemStorage")
 	mm := MemStorage{
 		storage: make(map[string]model.Metrica),
 		keys:    make([]string, 0),
