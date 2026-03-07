@@ -57,15 +57,13 @@ func run() error {
 		//Хранение в БД постгри
 
 		//Сначала запускаем миграции
-		if config.DatabaseURL != "" {
-			m, err := migrate.New("file://migrations", config.DatabaseURL)
-			if err != nil {
-				return err
-			}
+		m, err := migrate.New("file://migrations", config.DatabaseDSN)
+		if err != nil {
+			return err
+		}
 
-			if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-				return err
-			}
+		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+			return err
 		}
 
 		pgStorage, err := repository.NewPGStorage(memStorage, config.DatabaseDSN, mode)
