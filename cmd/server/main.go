@@ -18,6 +18,7 @@ import (
 
 func main() {
 	if err := run(); err != nil {
+
 		panic(err)
 	}
 }
@@ -28,10 +29,11 @@ func run() error {
 	defer cancel()
 
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
+		logger.Log.Error().Err(err)
 		return err
 	}
 
@@ -51,6 +53,7 @@ func run() error {
 
 		pgStorage, err := repository.NewPGStorage(memStorage, config.DatabaseDSN, mode)
 		if err != nil {
+			logger.Log.Error().Err(err)
 			return err
 		}
 		defer pgStorage.Close()
@@ -60,6 +63,7 @@ func run() error {
 
 		fileStorage, err := repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
 		if err != nil {
+			logger.Log.Error().Err(err)
 			return err
 		}
 		defer fileStorage.Close()

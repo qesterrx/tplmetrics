@@ -26,13 +26,10 @@ func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, re
 	//Проверяем существование файла, если файла нет надо его создать
 	_, err := os.Stat(filename)
 	if err != nil {
-		if os.IsNotExist(err) {
-			err := os.WriteFile(filename, []byte(""), 0666)
-			if err != nil {
-				return nil, fmt.Errorf("ошика создания файла %w", err)
-			}
+		err := os.WriteFile(filename, []byte(""), 0666)
+		if err != nil {
+			return nil, fmt.Errorf("ошика создания файла %w", err)
 		}
-		return nil, fmt.Errorf("ошика открытия файла %w", err)
 	}
 
 	fs := FileStorage{
@@ -53,18 +50,20 @@ func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, re
 			return nil, err
 		}
 
-		arrMetrica := []model.MetricaJSONAdapter{}
-		err = json.Unmarshal(data, &arrMetrica)
-		if err != nil {
-			return nil, err
-		}
-
-		for _, v := range arrMetrica {
-			mtrk, err := v.Metrica()
+		if len(data) > 0 {
+			arrMetrica := []model.MetricaJSONAdapter{}
+			err = json.Unmarshal(data, &arrMetrica)
 			if err != nil {
 				return nil, err
 			}
-			fs.MemStorage.UpdateMetrica(mtrk)
+
+			for _, v := range arrMetrica {
+				mtrk, err := v.Metrica()
+				if err != nil {
+					return nil, err
+				}
+				fs.MemStorage.UpdateMetrica(mtrk)
+			}
 		}
 
 	}

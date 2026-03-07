@@ -17,7 +17,7 @@ import (
 
 func main() {
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel) //Этот левел для меня )
+	zerolog.SetGlobalLevel(zerolog.InfoLevel) //Этот левел для меня )
 
 	config, err := config.ParseParamsAgent()
 	if err != nil {
