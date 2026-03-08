@@ -32,7 +32,7 @@ func run() error {
 	defer cancel()
 
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
@@ -54,7 +54,6 @@ func run() error {
 
 	//Дальше пытаемся подобрать реальный Storage по параметрам
 	if config.DatabaseDSN != "" {
-		//Хранение в БД постгри
 
 		//Сначала запускаем миграции
 		m, err := migrate.New("file://migrations", config.DatabaseDSN)
@@ -66,6 +65,7 @@ func run() error {
 			return err
 		}
 
+		//Хранение в БД постгри
 		pgStorage, err := repository.NewPGStorage(memStorage, config.DatabaseDSN, mode)
 		if err != nil {
 			logger.Log.Error().Err(err)

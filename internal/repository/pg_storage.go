@@ -114,6 +114,10 @@ func (pgs *PGStorage) Metrica(name string, kind string) (model.Metrica, error) {
 // Обновление метрики
 func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 
+	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
+	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelCtxTo()
+
 	err := pgs.MemStorage.UpdateMetrica(mtrk)
 	if err != nil {
 		return err
@@ -124,11 +128,51 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 		if err != nil {
 			return err
 		}
-		return pgs.sqlUpdtaeMetrica(m)
+		return pgs.sqlUpdtaeMetrica(ctxTo, m)
 	} else {
 		pgs.hasChanged = true
 		return nil
 	}
+
+}
+
+// Обновление массива метрик
+func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
+
+	if len(mtrks) == 0 {
+		return nil
+	}
+
+	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
+	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelCtxTo()
+
+	tx, err := pgs.pool.Begin(ctxTo)
+	if err != nil {
+		return err
+	}
+
+	for _, mtrk := range mtrks {
+		err := pgs.MemStorage.UpdateMetrica(mtrk)
+		if err != nil {
+			tx.Rollback(ctxTo)
+			return err
+		}
+
+		if pgs.mode == MetricaStorageModeSync {
+			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
+			if err != nil {
+				tx.Rollback(ctxTo)
+				return err
+			}
+		} else {
+			pgs.hasChanged = true
+		}
+	}
+
+	tx.Commit(ctxTo)
+
+	return nil
 
 }
 
@@ -142,21 +186,31 @@ func (pgs *PGStorage) Debug() {
 	pgs.MemStorage.Debug()
 }
 
-// Сброc сданных из памяти в БД
+// Сброc сданных из памяти в БД - ну извращение же, хотя для метрик может быть и норм
 func (pgs *PGStorage) WriteMetrics() error {
 
 	if pgs.hasChanged {
 
 		logger.Log.Debug().Msg("Синхронизация данных в БД")
 
+		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancelCtxTo()
+
+		tx, err := pgs.pool.Begin(ctxTo)
+		if err != nil {
+			return err
+		}
+
 		mtrks := pgs.MemStorage.AllMetrics()
 		for _, mtrk := range mtrks {
-			err := pgs.sqlUpdtaeMetrica(mtrk)
+			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
 			if err != nil {
+				tx.Rollback(ctxTo)
 				return err
 			}
 		}
 
+		tx.Commit(ctxTo)
 		pgs.hasChanged = false
 
 	}
@@ -166,16 +220,13 @@ func (pgs *PGStorage) WriteMetrics() error {
 
 // Пинг для 10 инкремента
 func (pgs *PGStorage) PingDB() error {
-	ctxto, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	return pgs.pool.Ping(ctxto)
+	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancelCtxTo()
+	return pgs.pool.Ping(ctxTo)
 }
 
 // функция для обновления метрики
-func (pgs *PGStorage) sqlUpdtaeMetrica(mtrk model.Metrica) error {
-
-	ctxto, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
+func (pgs *PGStorage) sqlUpdtaeMetrica(ctx context.Context, mtrk model.Metrica) error {
 
 	var value float64
 	var delta int64
@@ -190,7 +241,7 @@ func (pgs *PGStorage) sqlUpdtaeMetrica(mtrk model.Metrica) error {
 		return fmt.Errorf("неизвестный тип метрики в методе sqlUpdtaeMetrica")
 	}
 
-	_, err := pgs.pool.Exec(ctxto, `
+	_, err := pgs.pool.Exec(ctx, `
 INSERT INTO metrics (id, kind, delta, value, updated)
 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
 ON CONFLICT (id, kind)

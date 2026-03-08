@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
@@ -124,18 +125,22 @@ func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<-
 				}
 			}
 
-			//Сериализация и ставим в очередь на отправку
+			//Сериализация и ставим в очередь на отправку - Ну вот и пригодилось
+
+			mtrks := []model.Metrica{}
+
 			for _, metrica := range groupMap {
-				body, err := json.Marshal(metrica)
-				if err != nil {
-					logger.Log.Error().Msg("Ошибка сериализации метрики " + err.Error())
-					continue
-				}
-
-				logger.Log.Debug().Msg("В очередь на отправку добавлена метрика " + metrica.Name() + ":" + string(metrica.Kind()) + ":" + metrica.Value())
-				toSend <- body
-
+				mtrks = append(mtrks, metrica)
 			}
+
+			body, err := json.Marshal(mtrks)
+			if err != nil {
+				logger.Log.Error().Msg("Ошибка сериализации метрик " + err.Error())
+				continue
+			}
+
+			logger.Log.Debug().Msg(fmt.Sprintf("В очередь на отправку добавлена массив метрик в количестве %d", len(mtrks)))
+			toSend <- body
 
 		}
 	}

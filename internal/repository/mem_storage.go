@@ -61,6 +61,18 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 }
 
+// Обновление массива метрик
+func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
+	for _, mtrk := range mtrks {
+		err := ms.UpdateMetrica(mtrk)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // Получение всех сохраненных, с сортировкой по имени
 func (ms *MemStorage) AllMetrics() []model.Metrica {
 

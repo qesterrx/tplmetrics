@@ -27,6 +27,7 @@ func GetRouter(storage repository.MetricaStorage) chi.Router {
 	r.Post(`/update/{kind}/{name}/{value}`, UpdateMetricaHandler(storage))
 	r.Post(`/update/`, UpdateMetricaJSONHandler(storage))
 	r.Post(`/value/`, GetMetricaJSONHandler(storage))
+	r.Post(`/updates/`, UpdateMetricsJSONHandler(storage))
 
 	return r
 }
@@ -229,6 +230,58 @@ func GetMetricaJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 
 		w.Write(body)
+
+	})
+}
+
+// Обновление метрик массивом
+func UpdateMetricsJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Method != http.MethodPost || r.Header.Get("Content-Type") != "application/json" || r.ContentLength == 0 {
+			logger.Log.Info().Msg("UpdateMetricsJSONHandler клиент обратился с ошибочным методом в запросе")
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mtrksJSON := []model.MetricaJSONAdapter{}
+		//bt := []byte{}
+		//cnt, _ := r.Body.Read(bt)
+
+		//fmt.Println("readed ", cnt)
+		//fmt.Println(string(bt))
+
+		//err := json.NewDecoder(strings.NewReader(string(bt))).Decode(&mtrksJSON)
+		//А почему не заработало?
+		err := json.NewDecoder(r.Body).Decode(&mtrksJSON)
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricsJSONHandler ошибка разбора JSON: %s", err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		mtrks := []model.Metrica{}
+		for _, mtrkJSON := range mtrksJSON {
+			mtrk, err := mtrkJSON.Metrica()
+			if err != nil {
+				logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricsJSONHandler ошибка преобразования метрики %v : %s", mtrkJSON, err.Error()))
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			mtrks = append(mtrks, mtrk)
+		}
+
+		err = ms.UpdateMetricaBatch(mtrks)
+		if err != nil {
+			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricsJSONHandler ошибка при обновлении метрик: %s", err.Error()))
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		w.Write([]byte("{}"))
 
 	})
 }

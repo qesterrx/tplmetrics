@@ -103,6 +103,22 @@ func (fs *FileStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 }
 
+// Обновление массива метрик
+func (fs *FileStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
+	err := fs.MemStorage.UpdateMetricaBatch(mtrks)
+	if err != nil {
+		return err
+	}
+
+	fs.hasChanged = true
+	if fs.mode == MetricaStorageModeSync {
+		return fs.WriteMetrics()
+	} else {
+		return nil
+	}
+
+}
+
 // Получение всех сохраненных, с сортировкой по имени
 func (fs *FileStorage) AllMetrics() []model.Metrica {
 	return fs.MemStorage.AllMetrics()

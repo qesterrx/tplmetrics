@@ -55,7 +55,7 @@ func RunAgent(config *config.ConfigAgent) {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		url := fmt.Sprintf("http://%s/update/", config.ServerHost.String())
+		url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
 		agent.Sender(ctx, url, queueToSend)
 		cancel()
 	}()

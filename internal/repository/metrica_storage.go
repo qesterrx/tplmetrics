@@ -19,6 +19,8 @@ const (
 type MetricaStorage interface {
 	//Метод для обновления данных метрики
 	UpdateMetrica(model.Metrica) error
+	//Обновление массива метрик
+	UpdateMetricaBatch([]model.Metrica) error
 	//Метод получения экземпляра метрики по имени
 	Metrica(name string, kind string) (model.Metrica, error)
 	//Получение всех метрик
@@ -45,6 +47,7 @@ func TickerWriteMetrics(ctx context.Context, storage MetricaStorage, interval in
 			if err != nil {
 				logger.Log.Error().Msg("TickerWriteMetrics Ошибка при сохранении данных в файл" + err.Error())
 			}
+			logger.Log.Debug().Msg("TickerWriteMetrics сброс данных в хранилище")
 		}
 	}
 }
