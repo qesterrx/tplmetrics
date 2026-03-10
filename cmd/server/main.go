@@ -18,7 +18,6 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/golang-migrate/migrate/v4/database/postgres"
-	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -69,7 +68,7 @@ func run() error {
 			return err
 		}
 
-		//создаем driver для migrate используя существующее подключение
+		//Создаем driver для migrate используя существующее подключение
 		driver, err := postgres.WithInstance(conn, &postgres.Config{})
 		if err != nil {
 			return err
