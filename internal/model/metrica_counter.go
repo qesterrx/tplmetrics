@@ -44,7 +44,7 @@ func (m *MetricaCounter) UpdateValue(mtrk Metrica) error {
 		m.value = m.value + v.value
 		return nil
 	} else {
-		return fmt.Errorf("MetricaGauge.UpdateValue type mismatch: want MetricaCounter got %v", mtrk)
+		return fmt.Errorf("MetricaCounter.UpdateValue type mismatch: want MetricaCounter got %v", mtrk)
 	}
 }
 

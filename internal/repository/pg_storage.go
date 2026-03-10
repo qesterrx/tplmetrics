@@ -2,10 +2,10 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
@@ -14,42 +14,28 @@ import (
 
 type PGStorage struct {
 	MemStorage
-	databaseDSN string
-	mode        MetricaStorageMode
-	hasChanged  bool
-	pool        *pgxpool.Pool
+	mode       MetricaStorageMode
+	hasChanged bool
+	db         *sql.DB
 }
 
 // Фабрика
-func NewPGStorage(ms *MemStorage, databaseDSN string, mode MetricaStorageMode) (*PGStorage, error) {
+func NewPGStorage(ms *MemStorage, db *sql.DB, mode MetricaStorageMode) (*PGStorage, error) {
 
 	logger.Log.Debug().Msg("Создание PGStorage")
-	//На подключение к БД, пинг, загрузку данных даем 10 секунд
-	ctxto, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	//Коннект
-	pool, err := pgxpool.New(ctxto, databaseDSN)
-	if err != nil {
-		return nil, err
-	}
-
-	//Проверяем соединение
-	err = pool.Ping(ctxto)
-	if err != nil {
-		return nil, err
-	}
 
 	pgs := PGStorage{
-		MemStorage:  *ms,
-		mode:        mode,
-		databaseDSN: databaseDSN,
-		hasChanged:  false,
-		pool:        pool,
+		MemStorage: *ms,
+		mode:       mode,
+		hasChanged: false,
+		db:         db,
 	}
 
+	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancelCtxTo()
+
 	//Загружаем данные по сохраненным метрикам
-	rows, err := pool.Query(ctxto, "select id, kind, delta, value from metrics")
+	rows, err := db.QueryContext(ctxTo, "select id, kind, delta, value from metrics")
 	if err != nil {
 		return nil, err
 	}
@@ -91,18 +77,6 @@ func NewPGStorage(ms *MemStorage, databaseDSN string, mode MetricaStorageMode) (
 	}
 
 	return &pgs, nil
-}
-
-// Завершаем работу с PG
-func (pgs *PGStorage) Close() {
-
-	logger.Log.Debug().Msg("Закрытие PGStorage")
-
-	err := pgs.WriteMetrics()
-	if err != nil {
-		logger.Log.Debug().Msg("Ошибка сохранения данных PGStorage " + err.Error())
-	}
-	pgs.pool.Close()
 }
 
 // Получение метрики по имени
@@ -147,7 +121,7 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancelCtxTo()
 
-	tx, err := pgs.pool.Begin(ctxTo)
+	tx, err := pgs.db.BeginTx(ctxTo, nil)
 	if err != nil {
 		return err
 	}
@@ -155,14 +129,14 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	for _, mtrk := range mtrks {
 		err := pgs.MemStorage.UpdateMetrica(mtrk)
 		if err != nil {
-			tx.Rollback(ctxTo)
+			tx.Rollback()
 			return err
 		}
 
 		if pgs.mode == MetricaStorageModeSync {
 			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
 			if err != nil {
-				tx.Rollback(ctxTo)
+				tx.Rollback()
 				return err
 			}
 		} else {
@@ -170,7 +144,7 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 		}
 	}
 
-	tx.Commit(ctxTo)
+	tx.Commit()
 
 	return nil
 
@@ -196,7 +170,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancelCtxTo()
 
-		tx, err := pgs.pool.Begin(ctxTo)
+		tx, err := pgs.db.BeginTx(ctxTo, nil)
 		if err != nil {
 			return err
 		}
@@ -205,12 +179,12 @@ func (pgs *PGStorage) WriteMetrics() error {
 		for _, mtrk := range mtrks {
 			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
 			if err != nil {
-				tx.Rollback(ctxTo)
+				tx.Rollback()
 				return err
 			}
 		}
 
-		tx.Commit(ctxTo)
+		tx.Commit()
 		pgs.hasChanged = false
 
 	}
@@ -222,7 +196,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 func (pgs *PGStorage) PingDB() error {
 	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancelCtxTo()
-	return pgs.pool.Ping(ctxTo)
+	return pgs.db.PingContext(ctxTo)
 }
 
 // функция для обновления метрики
@@ -241,7 +215,7 @@ func (pgs *PGStorage) sqlUpdtaeMetrica(ctx context.Context, mtrk model.Metrica) 
 		return fmt.Errorf("неизвестный тип метрики в методе sqlUpdtaeMetrica")
 	}
 
-	_, err := pgs.pool.Exec(ctx, `
+	_, err := pgs.db.ExecContext(ctx, `
 INSERT INTO metrics (id, kind, delta, value, updated)
 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
 ON CONFLICT (id, kind)

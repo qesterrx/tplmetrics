@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 )
 
@@ -13,7 +14,6 @@ type ConfigServer struct {
 	FileStorageName        string
 	RestoreFromFileStorage bool
 	DatabaseDSN            string
-	DatabaseURL            string
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -66,22 +66,13 @@ func ParseParamsServer() (*ConfigServer, error) {
 		cfg.DatabaseDSN = envDatabaseDSN
 	}
 
-	//Перевод
+	//Дополнительные проверки параметров
 	if cfg.DatabaseDSN != "" {
-		var host string
-		var user string
-		var password string
-		var dbname string
-		var sslmode string
 
-		_, err := fmt.Sscanf(cfg.DatabaseDSN, "host=%s user=%s password=%s dbname=%s sslmode=%s", &host, &user, &password, &dbname, &sslmode)
-		if err != nil {
-			cfg.DatabaseURL = ""
-		} else {
-			cfg.DatabaseURL = fmt.Sprintf("postgres://%s:%s@%s/%s?sslmode=%s", user, password, host, dbname, sslmode)
+		matched, _ := regexp.MatchString(`^postgres://.*/.*?sslmode=.*$`, cfg.DatabaseDSN)
+		if !matched {
+			return nil, fmt.Errorf("неверный формат строки подключения к БД PostgreSQL (%s)", cfg.DatabaseDSN)
 		}
-
-		fmt.Println(cfg.DatabaseURL)
 
 	}
 

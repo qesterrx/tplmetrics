@@ -41,6 +41,11 @@ func TickerWriteMetrics(ctx context.Context, storage MetricaStorage, interval in
 		select {
 		case <-ctx.Done():
 			logger.Log.Debug().Msg("Завершение TickerWriteMetrics по контексту")
+			//Перед тем как выйти сделаем запись
+			err := storage.WriteMetrics()
+			if err != nil {
+				logger.Log.Error().Msg("TickerWriteMetrics Ошибка при сохранении данных в файл" + err.Error())
+			}
 			return
 		case <-ticker.C:
 			err := storage.WriteMetrics()

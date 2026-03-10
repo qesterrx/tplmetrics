@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"os"
 	"os/signal"
@@ -16,8 +17,10 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/repository"
 	"github.com/rs/zerolog"
 
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
@@ -32,7 +35,7 @@ func run() error {
 	defer cancel()
 
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.InfoLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
@@ -54,24 +57,41 @@ func run() error {
 
 	//Дальше пытаемся подобрать реальный Storage по параметрам
 	if config.DatabaseDSN != "" {
+		//Создаем подключение
+		conn, err := sql.Open("pgx", config.DatabaseDSN)
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
 
-		//Сначала запускаем миграции
-		m, err := migrate.New("file://migrations", config.DatabaseDSN)
+		//Проверяем подключение
+		if err := conn.Ping(); err != nil {
+			return err
+		}
+
+		//создаем driver для migrate используя существующее подключение
+		driver, err := postgres.WithInstance(conn, &postgres.Config{})
 		if err != nil {
 			return err
 		}
 
+		//Создаем экземпляр migrate
+		m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
+		if err != nil {
+			return err
+		}
+
+		//Запускаем миграции
 		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 			return err
 		}
 
 		//Хранение в БД постгри
-		pgStorage, err := repository.NewPGStorage(memStorage, config.DatabaseDSN, mode)
+		pgStorage, err := repository.NewPGStorage(memStorage, conn, mode)
 		if err != nil {
 			logger.Log.Error().Err(err)
 			return err
 		}
-		defer pgStorage.Close()
 		storage = pgStorage
 
 	} else if config.FileStorageName != "" {
@@ -81,7 +101,6 @@ func run() error {
 			logger.Log.Error().Err(err)
 			return err
 		}
-		defer fileStorage.Close()
 		storage = fileStorage
 
 	} else {

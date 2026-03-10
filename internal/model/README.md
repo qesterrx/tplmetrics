@@ -9,3 +9,5 @@
 3. Доработка в GetKindValue
 4. Доработка в MetricaJSON.Metrica()
 5. Доработка в PGStorage т.к. там есть type assertion
+
+Может все таки отказаться от структур metrica_counter и metrica_gauge. тогда из metrica_json_adapter можно сделать "универсальную" штуку.
