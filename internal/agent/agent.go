@@ -5,16 +5,44 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
+	"github.com/qesterrx/tplmetrics/internal/retry"
 )
+
+// Если честно - не понятно какие ошибки переотправлять а какие нет. Если это важно почему этому не научили или хотя бы не тыкнули носом во что-то полезное.
+// Не магия конечно но так... пальцем в небо
+var retryableErrors = []error{
+	syscall.ECONNREFUSED, //Соединение отклонено
+	syscall.ECONNRESET,   //Соединение сброшено
+	syscall.ETIMEDOUT,    //Таймаут операции
+	syscall.EHOSTUNREACH, //Хост недоступен
+	syscall.ENETUNREACH,  //Сеть недоступна
+	syscall.EPIPE,        //Разорванный канал
+	syscall.EAGAIN,       //Ресурс временно недоступен
+	syscall.EWOULDBLOCK,  //Ресурс временно недоступен
+}
+
+// Функция проверки ошибки на необходимость повтора
+func checkRetryRequest(err error) bool {
+
+	for _, v := range retryableErrors {
+		if errors.Is(err, v) {
+			//Повторяемая ошибка
+			return true
+		}
+	}
+	return false
+}
 
 /*Процедура собирает метрики через интервал pollInterval, записывает в очередь queue*/
 func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval int) {
@@ -161,41 +189,49 @@ func Sender(ctx context.Context, url string, toSend <-chan []byte) {
 			logger.Log.Debug().Msg("Остановка Sender по контексту")
 			return
 		case srcBody := <-toSend:
-			var compressed bytes.Buffer
 
-			gzWriter := gzip.NewWriter(&compressed)
+			//замыкание для вызова в retry.RetryFunc
+			fn := func() error {
+				var compressed bytes.Buffer
 
-			_, err := gzWriter.Write(srcBody)
+				gzWriter := gzip.NewWriter(&compressed)
+
+				_, err := gzWriter.Write(srcBody)
+				if err != nil {
+					return fmt.Errorf("Sender ошибка компрессии gzip %w", err)
+				}
+
+				// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
+				gzWriter.Close()
+
+				resp, err := client.R().
+					SetHeader("Content-Encoding", "gzip").
+					SetHeader("Content-Type", "application/json").
+					SetBody(compressed.Bytes()).
+					Post(url)
+
+				if err != nil {
+					//Получили ошибку при выполнении запроса
+					return fmt.Errorf("Sender ошибка выполнения запроса на сервер %w", err)
+				}
+
+				if resp.StatusCode() != http.StatusOK {
+					//Получили от сервера код который не ожидали
+					return fmt.Errorf("Sender сервер не принял сообщение StatusCode!=OK")
+				}
+
+				return nil
+			}
+
+			//Выполнение с повтором
+			err := retry.RetryFunc(ctx, fn, checkRetryRequest, 3, 1*time.Second, 2*time.Second)
+
 			if err != nil {
-				logger.Log.Error().Msg("Sender ошибка компрессии gzip " + err.Error())
+				logger.Log.Error().Msg(err.Error())
 				clentErrorCounter++
-				continue
+			} else {
+				logger.Log.Debug().Msg("Успешная отправка: " + string(srcBody))
 			}
-
-			// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
-			gzWriter.Close()
-
-			resp, err := client.R().
-				SetHeader("Content-Encoding", "gzip").
-				SetHeader("Content-Type", "application/json").
-				SetBody(compressed.Bytes()).
-				Post(url)
-
-			if err != nil {
-				//Получили ошибку при выполнении запроса
-				logger.Log.Error().Msg("Sender ошибка выполнения запроса на сервер " + err.Error())
-				clentErrorCounter++
-				continue
-			}
-
-			if resp.StatusCode() != http.StatusOK {
-				//Получили от сервера код который не ожидали
-				logger.Log.Error().Msg("Sender сервер не принял сообщение StatusCode!=OK")
-				clentErrorCounter++
-				continue
-			}
-
-			logger.Log.Debug().Msg("Успешная отправка: " + string(srcBody))
 		}
 	}
 }

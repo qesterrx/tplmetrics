@@ -3,11 +3,14 @@ package repository
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
+	"github.com/qesterrx/tplmetrics/internal/retry"
 )
 
 /*Реализация интерфейса MetricaStorage для хранения данных в БД PostgreSQL*/
@@ -17,6 +20,24 @@ type PGStorage struct {
 	mode       MetricaStorageMode
 	hasChanged bool
 	db         *sql.DB
+}
+
+// Функция проверяет ошибку на возможность retry
+func checkRetryPg(err error) bool {
+
+	//По идее тут тоже могут быть ошибки сетевого взаимодействия, если БД вдруг упала скорее всего будет так же connect: connection refused
+
+	//пу-пу-пу
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		if len(pgErr.Code) >= 2 && pgErr.Code[:2] == "08" {
+			logger.Log.Error().Msg("ошибка выполнения в postgresql, code:" + pgErr.Code)
+			return true
+		}
+	}
+
+	return false
+
 }
 
 // Фабрика
@@ -89,64 +110,88 @@ func (pgs *PGStorage) Metrica(name string, kind string) (model.Metrica, error) {
 func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
-	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancelCtxTo()
-
 	err := pgs.MemStorage.UpdateMetrica(mtrk)
 	if err != nil {
 		return err
 	}
 
-	if pgs.mode == MetricaStorageModeSync {
-		m, err := pgs.MemStorage.Metrica(mtrk.Name(), string(mtrk.Kind()))
-		if err != nil {
-			return err
-		}
-		return pgs.sqlUpdtaeMetrica(ctxTo, m)
-	} else {
+	//Если асинхрон - то просто признак и выходим
+	if pgs.mode != MetricaStorageModeSync {
 		pgs.hasChanged = true
 		return nil
 	}
+
+	//У Counterа корректное значение будет в памяти, его надо получить
+	m, err := pgs.MemStorage.Metrica(mtrk.Name(), string(mtrk.Kind()))
+	if err != nil {
+		return err
+	}
+
+	//Замыкание для повторов
+	fn := func() error {
+
+		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancelCtxTo()
+
+		return pgs.sqlUpdtaeMetrica(ctxTo, m)
+	}
+
+	//Выполнение метода
+	return retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
 
 }
 
 // Обновление массива метрик
 func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
+	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
+
 	if len(mtrks) == 0 {
 		return nil
 	}
 
-	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
-	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancelCtxTo()
-
-	tx, err := pgs.db.BeginTx(ctxTo, nil)
-	if err != nil {
-		return err
-	}
-
+	//Обновляем метрики в памяти без повторов
 	for _, mtrk := range mtrks {
 		err := pgs.MemStorage.UpdateMetrica(mtrk)
 		if err != nil {
-			tx.Rollback()
+			return err
+		}
+	}
+
+	//Если асинхрон - то просто признак и выходим
+	if pgs.mode != MetricaStorageModeSync {
+		pgs.hasChanged = true
+		return nil
+	}
+
+	//Замыкание для повторов
+	fn := func() error {
+
+		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancelCtxTo()
+
+		tx, err := pgs.db.BeginTx(ctxTo, nil)
+		if err != nil {
 			return err
 		}
 
-		if pgs.mode == MetricaStorageModeSync {
+		for _, mtrk := range mtrks {
+
 			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
 			if err != nil {
 				tx.Rollback()
 				return err
 			}
-		} else {
-			pgs.hasChanged = true
+
 		}
+
+		tx.Commit()
+		return nil
+
 	}
 
-	tx.Commit()
-
-	return nil
+	//Выполнение метода
+	return retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
 
 }
 
@@ -167,25 +212,32 @@ func (pgs *PGStorage) WriteMetrics() error {
 
 		logger.Log.Debug().Msg("Синхронизация данных в БД")
 
-		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancelCtxTo()
+		//Замыкание для повторов
+		fn := func() error {
+			ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancelCtxTo()
 
-		tx, err := pgs.db.BeginTx(ctxTo, nil)
-		if err != nil {
-			return err
-		}
-
-		mtrks := pgs.MemStorage.AllMetrics()
-		for _, mtrk := range mtrks {
-			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
+			tx, err := pgs.db.BeginTx(ctxTo, nil)
 			if err != nil {
-				tx.Rollback()
 				return err
 			}
+
+			mtrks := pgs.MemStorage.AllMetrics()
+			for _, mtrk := range mtrks {
+				err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
+				if err != nil {
+					tx.Rollback()
+					return err
+				}
+			}
+
+			tx.Commit()
+			pgs.hasChanged = false
+			return nil
 		}
 
-		tx.Commit()
-		pgs.hasChanged = false
+		//Выполнение метода
+		return retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
 
 	}
 
