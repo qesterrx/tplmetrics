@@ -113,7 +113,7 @@ func (ms *MemStorage) WriteMetrics() error {
 }
 
 // Проверка хранилища, еще одна заглушка
-func (pgs *MemStorage) Check() error {
+func (ms *MemStorage) Check() error {
 	return nil
 }
 

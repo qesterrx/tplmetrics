@@ -149,6 +149,6 @@ func (fs *FileStorage) WriteMetrics() error {
 }
 
 // Проверка хранилища, заглушка - не знаю что тут можно для файла проверить.. что он есть и открывается?
-func (pgs *FileStorage) Check() error {
+func (fs *FileStorage) Check() error {
 	return nil
 }

@@ -105,7 +105,7 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 
 /*Процедура через reportInterval вычитывает очередь toGroup, группирует gauge метрики и ставит в очередь на отправку toSend в виде []byte*/
 func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval int, url string) {
-	logger.Log.Debug().Msg("Запуск Compressor")
+	logger.Log.Debug().Msg("Запуск Reporter")
 
 	ticker := time.NewTicker(time.Second * time.Duration(reportInterval))
 	defer ticker.Stop()
@@ -120,11 +120,11 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 		select {
 		case <-ctx.Done():
 			//Если получили сигнал завершения останавливаемся
-			logger.Log.Debug().Msg("Остановка Compressor по контексту")
+			logger.Log.Debug().Msg("Остановка Reporter по контексту")
 			return
 		case <-ticker.C:
 
-			logger.Log.Debug().Msg("Compressor запуск группировки данных из очереди toGroup")
+			logger.Log.Debug().Msg("Reporter запуск группировки данных из очереди toGroup")
 
 		loop:
 			for {
@@ -204,7 +204,7 @@ func Send(ctx context.Context, client *resty.Client, url string, srcBody []byte)
 
 		_, err := gzWriter.Write(srcBody)
 		if err != nil {
-			return fmt.Errorf("Sender ошибка компрессии gzip %w", err)
+			return fmt.Errorf("sender ошибка компрессии gzip %w", err)
 		}
 
 		// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
@@ -218,12 +218,12 @@ func Send(ctx context.Context, client *resty.Client, url string, srcBody []byte)
 
 		if err != nil {
 			//Получили ошибку при выполнении запроса
-			return fmt.Errorf("Sender ошибка выполнения запроса на сервер %w", err)
+			return fmt.Errorf("sender ошибка выполнения запроса на сервер %w", err)
 		}
 
 		if resp.StatusCode() != http.StatusOK {
 			//Получили от сервера код который не ожидали
-			return fmt.Errorf("Sender сервер не принял сообщение StatusCode!=OK")
+			return fmt.Errorf("sender сервер не принял сообщение StatusCode!=OK")
 		}
 
 		return nil
