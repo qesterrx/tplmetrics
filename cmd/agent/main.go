@@ -17,7 +17,7 @@ import (
 
 func main() {
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.InfoLevel) //Этот левел для меня )
+	zerolog.SetGlobalLevel(zerolog.DebugLevel) //Этот левел для меня )
 
 	config, err := config.ParseParamsAgent()
 	if err != nil {
@@ -31,7 +31,6 @@ func RunAgent(config *config.ConfigAgent) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	queueToGroup := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
-	queueToSend := make(chan []byte, 1000)         //Количество ~= Количество метрик*2
 
 	wg := sync.WaitGroup{}
 
@@ -43,20 +42,12 @@ func RunAgent(config *config.ConfigAgent) {
 		cancel()
 	}()
 
-	//Группиратор берет метрики в queueToGroup, группирует, сериализует и записывает в queueToSend в виде []byte
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		agent.Compressor(ctx, queueToGroup, queueToSend, config.ReportInterval)
-		cancel()
-	}()
-
-	//Отправщик, работает со слайсом байт, ему все равно что отправлять, отправляет сразу же как только появился элемент в queueToSend
+	//Репортер берет метрики из queueToGroup, группирует, сериализует и пытается отправить
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
 		url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
-		agent.Sender(ctx, url, queueToSend)
+		agent.Reporter(ctx, queueToGroup, config.ReportInterval, url)
 		cancel()
 	}()
 

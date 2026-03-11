@@ -88,7 +88,10 @@ func NewPGStorage(ms *MemStorage, db *sql.DB, mode MetricaStorageMode) (*PGStora
 			return nil, fmt.Errorf("при загрузке данных из БД обнаружен неизвестный тип метрики")
 		}
 
-		pgs.MemStorage.UpdateMetrica(mtrk)
+		err = pgs.MemStorage.UpdateMetrica(mtrk)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// проверяем на ошибки - не понял зачем это?
@@ -109,21 +112,21 @@ func (pgs *PGStorage) Metrica(name string, kind string) (model.Metrica, error) {
 // Обновление метрики
 func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 
-	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
-	err := pgs.MemStorage.UpdateMetrica(mtrk)
-	if err != nil {
-		return err
-	}
-
 	//Если асинхрон - то просто признак и выходим
 	if pgs.mode != MetricaStorageModeSync {
+
+		err := pgs.MemStorage.UpdateMetrica(mtrk)
+		if err != nil {
+			return err
+		}
+
 		pgs.hasChanged = true
 		return nil
 	}
 
-	//У Counterа корректное значение будет в памяти, его надо получить
-	m, err := pgs.MemStorage.Metrica(mtrk.Name(), string(mtrk.Kind()))
+	touched, err := pgs.MemStorage.startUpdateMetricaBatch([]model.Metrica{mtrk})
 	if err != nil {
+		pgs.restoreUpdateMetricaBatch(touched)
 		return err
 	}
 
@@ -133,35 +136,64 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancelCtxTo()
 
-		return pgs.sqlUpdtaeMetrica(ctxTo, m)
+		//По идее тут будут накладные расходы на транзакцию, писать два метода не захотел, мешать в один тоже, может придумаю что получше попозже
+		tx, err := pgs.db.BeginTx(ctxTo, nil)
+		if err != nil {
+			return err
+		}
+
+		//Точно знаем что в touched один элемент
+		mtrkCurr := (*touched)[0]
+		err = pgs.sqlUpdateMetricaTx(ctxTo, tx, *mtrkCurr, "new")
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+
+		tx.Commit()
+
+		return nil
+
 	}
 
 	//Выполнение метода
-	return retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+	err = retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+	if err != nil {
+		//Откатить изменения в памяти
+		pgs.MemStorage.restoreUpdateMetricaBatch(touched)
+		return err
+	}
+
+	//Зафиксировать изменения в памяти
+	pgs.MemStorage.confirmUpdateMetricaBatch(touched)
+	return nil
 
 }
 
 // Обновление массива метрик
 func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
-	//Я бы конечно использовал WriteMetrics но для чистоты экскримента сделаю тут по другому
-
 	if len(mtrks) == 0 {
 		return nil
 	}
 
-	//Обновляем метрики в памяти без повторов
-	for _, mtrk := range mtrks {
-		err := pgs.MemStorage.UpdateMetrica(mtrk)
+	//Если асинхрон - то просто признак и выходим
+	if pgs.mode != MetricaStorageModeSync {
+
+		err := pgs.MemStorage.UpdateMetricaBatch(mtrks)
 		if err != nil {
 			return err
 		}
-	}
 
-	//Если асинхрон - то просто признак и выходим
-	if pgs.mode != MetricaStorageModeSync {
 		pgs.hasChanged = true
 		return nil
+	}
+
+	//Обновляем метрики в памяти без повторов
+	touched, err := pgs.MemStorage.startUpdateMetricaBatch(mtrks)
+	if err != nil {
+		pgs.restoreUpdateMetricaBatch(touched)
+		return err
 	}
 
 	//Замыкание для повторов
@@ -175,9 +207,10 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 			return err
 		}
 
-		for _, mtrk := range mtrks {
+		//Раз у нас есть ссылки на затронутые объекты, почему бы этим не воспользоваться
+		for _, mtrk := range *touched {
 
-			err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
+			err = pgs.sqlUpdateMetricaTx(ctxTo, tx, *mtrk, "new")
 			if err != nil {
 				tx.Rollback()
 				return err
@@ -191,7 +224,16 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	}
 
 	//Выполнение метода
-	return retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+	err = retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+	if err != nil {
+		//Откатить изменения в памяти
+		pgs.MemStorage.restoreUpdateMetricaBatch(touched)
+		return err
+	}
+
+	//Зафиксировать изменения в памяти
+	pgs.MemStorage.confirmUpdateMetricaBatch(touched)
+	return nil
 
 }
 
@@ -224,7 +266,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 
 			mtrks := pgs.MemStorage.AllMetrics()
 			for _, mtrk := range mtrks {
-				err := pgs.sqlUpdtaeMetrica(ctxTo, mtrk)
+				err := pgs.sqlUpdateMetricaTx(ctxTo, tx, mtrk, "current")
 				if err != nil {
 					tx.Rollback()
 					return err
@@ -245,14 +287,18 @@ func (pgs *PGStorage) WriteMetrics() error {
 }
 
 // Пинг для 10 инкремента
-func (pgs *PGStorage) PingDB() error {
+func (pgs *PGStorage) Check() error {
 	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancelCtxTo()
 	return pgs.db.PingContext(ctxTo)
 }
 
 // функция для обновления метрики
-func (pgs *PGStorage) sqlUpdtaeMetrica(ctx context.Context, mtrk model.Metrica) error {
+func (pgs *PGStorage) sqlUpdateMetricaTx(ctx context.Context, tx *sql.Tx, mtrk model.Metrica, env string) error {
+
+	if tx == nil {
+		return fmt.Errorf("процедура sqlUpdateMetricaTx ожидает ссылку на транзакцию Tx")
+	}
 
 	var value float64
 	var delta int64
@@ -260,14 +306,14 @@ func (pgs *PGStorage) sqlUpdtaeMetrica(ctx context.Context, mtrk model.Metrica) 
 	//Ну вот и все.. все-таки пришлось использовать type assertion хотя я всеми силами пытался этого избежать
 	switch m := mtrk.(type) {
 	case *model.MetricaCounter:
-		delta = m.SrcValue()
+		delta = m.SrcValue(env)
 	case *model.MetricaGauge:
-		value = m.SrcValue()
+		value = m.SrcValue(env)
 	default:
-		return fmt.Errorf("неизвестный тип метрики в методе sqlUpdtaeMetrica")
+		return fmt.Errorf("неизвестный тип метрики в методе sqlUpdateMetrica")
 	}
 
-	_, err := pgs.db.ExecContext(ctx, `
+	_, err := tx.ExecContext(ctx, `
 INSERT INTO metrics (id, kind, delta, value, updated)
 VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
 ON CONFLICT (id, kind)

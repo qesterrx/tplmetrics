@@ -71,16 +71,6 @@ func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, re
 	return &fs, nil
 }
 
-// Завершаем работу с файлом
-func (fs *FileStorage) Close() {
-	logger.Log.Debug().Msg("Закрытие FileStorage")
-
-	err := fs.WriteMetrics()
-	if err != nil {
-		logger.Log.Debug().Msg("Ошибка сохранения данных FileStorage " + err.Error())
-	}
-}
-
 // Получение метрики по имени
 func (fs *FileStorage) Metrica(name string, kind string) (model.Metrica, error) {
 	return fs.MemStorage.Metrica(name, kind)
@@ -96,11 +86,13 @@ func (fs *FileStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	fs.hasChanged = true
 	if fs.mode == MetricaStorageModeSync {
-		return fs.WriteMetrics()
-	} else {
-		return nil
+		err := fs.WriteMetrics()
+		if err != nil {
+			return err
+		}
 	}
 
+	return nil
 }
 
 // Обновление массива метрик
@@ -112,11 +104,13 @@ func (fs *FileStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
 	fs.hasChanged = true
 	if fs.mode == MetricaStorageModeSync {
-		return fs.WriteMetrics()
-	} else {
-		return nil
+		err := fs.WriteMetrics()
+		if err != nil {
+			return err
+		}
 	}
 
+	return nil
 }
 
 // Получение всех сохраненных, с сортировкой по имени
@@ -151,5 +145,10 @@ func (fs *FileStorage) WriteMetrics() error {
 
 	}
 
+	return nil
+}
+
+// Проверка хранилища, заглушка - не знаю что тут можно для файла проверить.. что он есть и открывается?
+func (pgs *FileStorage) Check() error {
 	return nil
 }

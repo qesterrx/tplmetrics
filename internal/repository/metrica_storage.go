@@ -27,6 +27,8 @@ type MetricaStorage interface {
 	AllMetrics() []model.Metrica
 	//Метод для "сброса" накопившихся записей в долговременное хранилище
 	WriteMetrics() error
+	//Проверка хранилища
+	Check() error
 	//Отладочный вызов
 	Debug()
 }

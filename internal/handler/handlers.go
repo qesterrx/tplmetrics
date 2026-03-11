@@ -40,20 +40,14 @@ func PingDBHandler(storage repository.MetricaStorage) http.HandlerFunc {
 			return
 		}
 
-		if PGStorage, ok := storage.(*repository.PGStorage); ok {
-			err := PGStorage.PingDB()
-			if err != nil {
-				logger.Log.Error().Msg("PingDBHandler не удалось выполнить Ping DB")
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-			w.WriteHeader(http.StatusOK)
-
-		} else {
-			logger.Log.Info().Msg("PingDBHandler сервер запущен без работы с БД, метод не поддерживается")
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		err := storage.Check()
+		if err != nil {
+			logger.Log.Error().Msg("PingDBHandler не удалось выполнить Ping DB")
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
+		w.WriteHeader(http.StatusOK)
+
 	})
 }
 
@@ -245,14 +239,6 @@ func UpdateMetricsJSONHandler(ms repository.MetricaStorage) http.HandlerFunc {
 		}
 
 		mtrksJSON := []model.MetricaJSONAdapter{}
-		//bt := []byte{}
-		//cnt, _ := r.Body.Read(bt)
-
-		//fmt.Println("readed ", cnt)
-		//fmt.Println(string(bt))
-
-		//err := json.NewDecoder(strings.NewReader(string(bt))).Decode(&mtrksJSON)
-		//А почему не заработало?
 		err := json.NewDecoder(r.Body).Decode(&mtrksJSON)
 		if err != nil {
 			logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricsJSONHandler ошибка разбора JSON: %s", err.Error()))

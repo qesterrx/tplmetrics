@@ -104,11 +104,17 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 }
 
 /*Процедура через reportInterval вычитывает очередь toGroup, группирует gauge метрики и ставит в очередь на отправку toSend в виде []byte*/
-func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- []byte, reportInterval int) {
+func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval int, url string) {
 	logger.Log.Debug().Msg("Запуск Compressor")
 
 	ticker := time.NewTicker(time.Second * time.Duration(reportInterval))
 	defer ticker.Stop()
+
+	//в данной структуре будем группировать данные из очереди, кроме того с помощью нее обеспечим транзакционность
+	groupMap := map[string]model.Metrica{}
+
+	//Клиента создаем один раз
+	client := resty.New()
 
 	for {
 		select {
@@ -119,7 +125,6 @@ func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<-
 		case <-ticker.C:
 
 			logger.Log.Debug().Msg("Compressor запуск группировки данных из очереди toGroup")
-			groupMap := map[string]model.Metrica{}
 
 		loop:
 			for {
@@ -138,9 +143,11 @@ func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<-
 						if ok {
 							err := oldMetrica.UpdateValue(metrica)
 							if err != nil {
+								oldMetrica.Restore()
 								logger.Log.Error().Msg("Ошибка обновления метрики " + err.Error())
 								continue
 							}
+							oldMetrica.Confirm()
 						} else {
 							groupMap[metrica.Name()] = metrica
 						}
@@ -154,7 +161,6 @@ func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<-
 			}
 
 			//Сериализация и ставим в очередь на отправку - Ну вот и пригодилось
-
 			mtrks := []model.Metrica{}
 
 			for _, metrica := range groupMap {
@@ -167,77 +173,63 @@ func Compressor(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<-
 				continue
 			}
 
-			logger.Log.Debug().Msg(fmt.Sprintf("В очередь на отправку добавлена массив метрик в количестве %d", len(mtrks)))
-			toSend <- body
+			logger.Log.Debug().Msg(fmt.Sprintf("Попытка отправить массив метрик, количество %d", len(mtrks)))
 
-		}
-	}
-
-}
-
-/*Процедура отвечает только за отправку уже сериализованных данных, отправляет сразу же как в toSend появляются данные*/
-func Sender(ctx context.Context, url string, toSend <-chan []byte) {
-	logger.Log.Debug().Msg("Запуск Sender")
-
-	client := resty.New()
-	clentErrorCounter := 0
-
-	for {
-		select {
-		case <-ctx.Done():
-			//Если получили сигнал завершения останавливаемся
-			logger.Log.Debug().Msg("Остановка Sender по контексту")
-			return
-		case srcBody := <-toSend:
-
-			//замыкание для вызова в retry.RetryFunc
-			fn := func() error {
-				var compressed bytes.Buffer
-
-				gzWriter := gzip.NewWriter(&compressed)
-
-				_, err := gzWriter.Write(srcBody)
-				if err != nil {
-					return fmt.Errorf("Sender ошибка компрессии gzip %w", err)
-				}
-
-				// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
-				gzWriter.Close()
-
-				resp, err := client.R().
-					SetHeader("Content-Encoding", "gzip").
-					SetHeader("Content-Type", "application/json").
-					SetBody(compressed.Bytes()).
-					Post(url)
-
-				if err != nil {
-					//Получили ошибку при выполнении запроса
-					return fmt.Errorf("Sender ошибка выполнения запроса на сервер %w", err)
-				}
-
-				if resp.StatusCode() != http.StatusOK {
-					//Получили от сервера код который не ожидали
-					return fmt.Errorf("Sender сервер не принял сообщение StatusCode!=OK")
-				}
-
-				return nil
-			}
-
-			//Выполнение с повтором
-			err := retry.RetryFunc(ctx, fn, checkRetryRequest, 3, 1*time.Second, 2*time.Second)
+			//Отправка данных
+			err = Send(ctx, client, url, body)
 
 			if err != nil {
 				logger.Log.Error().Msg(err.Error())
-				clentErrorCounter++
 			} else {
-				logger.Log.Debug().Msg("Успешная отправка: " + string(srcBody))
+				logger.Log.Debug().Msg("Успешная отправка: " + string(body))
+				//Вот хвост транзакционности, если метрики отправили то следующая обработка начнет группировку заново
+				//  если была ошибка то в groupMap остаются записи и следующая группировка будет их обновлять
+				//  естественно, ожидаем что сервер либо принимает все метрики либо ни одной (т.е. от него тоже ждем транзакционности)
+				groupMap = map[string]model.Metrica{}
 			}
+
 		}
 	}
+
 }
 
-/*Хм все таки насколько критично то что метрики не дошли до сервера?
-Я ушел от сейвМапы потому что подход мне не нравился, хотя наверное он был и ничего
-Сейчас при ошибке отправки я получается теряю запись о обновлении метрики
-Может быть для Gauge это не критично, но вот Counter при ошибке во времени отправки сразу начнет брехать и со временем это может стать значимо
-Все таки какой путь тут выбрать? очень нужен комментарий!*/
+/*Процедура отвечает только за отправку уже сериализованных данных*/
+func Send(ctx context.Context, client *resty.Client, url string, srcBody []byte) error {
+
+	//замыкание для вызова в retry.RetryFunc
+	fn := func() error {
+		var compressed bytes.Buffer
+
+		gzWriter := gzip.NewWriter(&compressed)
+
+		_, err := gzWriter.Write(srcBody)
+		if err != nil {
+			return fmt.Errorf("Sender ошибка компрессии gzip %w", err)
+		}
+
+		// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
+		gzWriter.Close()
+
+		resp, err := client.R().
+			SetHeader("Content-Encoding", "gzip").
+			SetHeader("Content-Type", "application/json").
+			SetBody(compressed.Bytes()).
+			Post(url)
+
+		if err != nil {
+			//Получили ошибку при выполнении запроса
+			return fmt.Errorf("Sender ошибка выполнения запроса на сервер %w", err)
+		}
+
+		if resp.StatusCode() != http.StatusOK {
+			//Получили от сервера код который не ожидали
+			return fmt.Errorf("Sender сервер не принял сообщение StatusCode!=OK")
+		}
+
+		return nil
+	}
+
+	//Выполнение с повтором
+	return retry.RetryFunc(ctx, fn, checkRetryRequest, 3, 1*time.Second, 2*time.Second)
+
+}

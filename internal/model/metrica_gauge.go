@@ -11,16 +11,18 @@ func FormatMetricaGauge(value float64) string {
 }
 
 type MetricaGauge struct {
-	name  string
-	kind  KindValue
-	value float64
+	name     string
+	kind     KindValue
+	value    float64
+	newValue *float64
 }
 
 func NewMetricaGauge(name string, value float64) *MetricaGauge {
 	return &MetricaGauge{
-		name:  name,
-		kind:  Gauge,
-		value: value,
+		name:     name,
+		kind:     Gauge,
+		value:    value,
+		newValue: nil,
 	}
 }
 
@@ -36,16 +38,39 @@ func (m *MetricaGauge) Value() string {
 	return FormatMetricaGauge(m.value)
 }
 
-func (m *MetricaGauge) SrcValue() float64 {
+func (m *MetricaGauge) SrcValue(env string) float64 {
+	if env == "new" && m.newValue != nil {
+		return *m.newValue
+	}
 	return m.value
 }
 
 func (m *MetricaGauge) UpdateValue(mtrk Metrica) error {
 	if v, ok := mtrk.(*MetricaGauge); ok {
-		m.value = v.value
-		return nil
+
+		if m.newValue != nil {
+			return fmt.Errorf("другой процесс уже обновляет метрику %s", m.name)
+		} else {
+			newValue := new(float64)
+			*newValue = v.value
+			m.newValue = newValue
+			return nil
+		}
 	} else {
 		return fmt.Errorf("MetricaGauge.UpdateValue type mismatch: want MetricaGauge got %v", mtrk)
+	}
+}
+
+func (m *MetricaGauge) Restore() {
+	if m.newValue != nil {
+		m.newValue = nil
+	}
+}
+
+func (m *MetricaGauge) Confirm() {
+	if m.newValue != nil {
+		m.value = *(m.newValue)
+		m.newValue = nil
 	}
 }
 
