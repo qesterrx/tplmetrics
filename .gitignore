@@ -12,10 +12,10 @@
 *.out
 
 # Binaries
-cmd/agent/main
 cmd/agent/agent
-cmd/server/main
 cmd/server/server
+cmd/agent/agent_race
+cmd/server/server_race
 metricstest_v2
 
 # Dependency directories (remove the comment below to include it)

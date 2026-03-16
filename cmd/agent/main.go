@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -10,12 +11,13 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/agent"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
+	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/rs/zerolog"
 )
 
 func main() {
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+	zerolog.SetGlobalLevel(zerolog.DebugLevel) //Этот левел для меня )
 
 	config, err := config.ParseParamsAgent()
 	if err != nil {
@@ -28,20 +30,24 @@ func main() {
 func RunAgent(config *config.ConfigAgent) {
 
 	ctx, cancel := context.WithCancel(context.Background())
+	queueToGroup := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
 
 	wg := sync.WaitGroup{}
 
+	//Сборщик записывает метрики в queueToGroup
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		agent.Collector(ctx, config.PoolInterval)
+		agent.Collector(ctx, queueToGroup, config.PoolInterval)
 		cancel()
 	}()
 
+	//Репортер берет метрики из queueToGroup, группирует, сериализует и пытается отправить
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		agent.Sender(ctx, config.ReportInterval, config.ServerHost.String(), config.ClientErrorCount)
+		url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
+		agent.Reporter(ctx, queueToGroup, config.ReportInterval, url)
 		cancel()
 	}()
 

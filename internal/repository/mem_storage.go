@@ -4,17 +4,20 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
+/*Базовая реализация интерфейса MetricaStorage*/
+
 type MemStorage struct {
-	storage     map[string]model.Metrica
-	keys        []string
-	eventsQueue chan bool
+	storage map[string]model.Metrica
+	keys    []string
 }
 
 // Фабрика
 func NewMemStorage() *MemStorage {
+	logger.Log.Debug().Msg("Создание MemStorage")
 	mm := MemStorage{
 		storage: make(map[string]model.Metrica),
 		keys:    make([]string, 0),
@@ -38,7 +41,7 @@ func (ms *MemStorage) Metrica(name string, kind string) (model.Metrica, error) {
 
 }
 
-// Обновление метрики
+// Обновление метрики - атомарная операция, либо обновилась либо нет
 func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	key := string(mtrk.Kind()) + "_" + mtrk.Name()
@@ -47,19 +50,30 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 	if ok {
 		err := mtrkSaved.UpdateValue(mtrk)
 		if err != nil {
+			mtrkSaved.Restore()
 			return err
 		}
+		mtrkSaved.Confirm()
 	} else {
 		ms.storage[key] = mtrk
 		ms.keys = append(ms.keys, key)
 	}
 
-	if ms.eventsQueue != nil {
-		ms.eventsQueue <- true
-	}
-
 	return nil
 
+}
+
+// Обновление массива метрик - а вот тут "массовая" операция, если наткнулись на ошибку - надо все откатить
+func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
+
+	touched, err := ms.startUpdateMetricaBatch(mtrks)
+	if err != nil {
+		ms.restoreUpdateMetricaBatch(touched)
+		return err
+	}
+
+	ms.confirmUpdateMetricaBatch(touched)
+	return nil
 }
 
 // Получение всех сохраненных, с сортировкой по имени
@@ -93,10 +107,59 @@ func (ms *MemStorage) Debug() {
 	}
 }
 
-// Наша очередь с событиями, но что будет если ее никто не будет вычитывать?
-func (ms *MemStorage) GetQueueUpdateEvents() *chan bool {
-	if ms.eventsQueue == nil {
-		ms.eventsQueue = make(chan bool, 10000)
+// По факту это заглушка т.к. memStorage некуда скидывать данные
+func (ms *MemStorage) WriteMetrics() error {
+	return nil
+}
+
+// Проверка хранилища, еще одна заглушка
+func (ms *MemStorage) Check() error {
+	return nil
+}
+
+// т.к остальные реализации интерфейса MetricaStorage реализованы встраиванием этого
+// нужны операции с возможностью отката и фиксации
+// чет мне кажется что я упоролся.. но пока еще не понял до конца
+
+// Обновление массива метрик - а вот тут "массовая" операция, если наткнулись на ошибку - надо все откатить
+func (ms *MemStorage) startUpdateMetricaBatch(mtrks []model.Metrica) (*[]*model.Metrica, error) {
+
+	touched := []*model.Metrica{}
+
+	for _, mtrk := range mtrks {
+
+		key := string(mtrk.Kind()) + "_" + mtrk.Name()
+
+		mtrkSaved, ok := ms.storage[key]
+		if ok {
+			err := mtrkSaved.UpdateValue(mtrk)
+			if err != nil {
+				return &touched, err
+			}
+			//Для возможности отката запоминаем объекты которые мы обновили
+			touched = append(touched, &mtrkSaved)
+		} else {
+			ms.storage[key] = mtrk
+			ms.keys = append(ms.keys, key)
+			//Для возможности отката запоминаем объекты которые мы обновили
+			touched = append(touched, &mtrk)
+		}
+
 	}
-	return &ms.eventsQueue
+
+	return &touched, nil
+}
+
+func (ms *MemStorage) confirmUpdateMetricaBatch(mtrks *[]*model.Metrica) {
+
+	for _, mtrk := range *mtrks {
+		(*mtrk).Confirm()
+	}
+}
+
+func (ms *MemStorage) restoreUpdateMetricaBatch(mtrks *[]*model.Metrica) {
+
+	for _, mtrk := range *mtrks {
+		(*mtrk).Restore()
+	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"os"
 	"os/signal"
@@ -9,14 +10,25 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/golang-migrate/migrate/v4"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 	"github.com/rs/zerolog"
+
+	"github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
+	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 func main() {
+	if err := run(); err != nil {
+		panic(err)
+	}
+}
+
+func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -26,36 +38,86 @@ func main() {
 
 	config, err := config.ParseParamsServer()
 	if err != nil {
-		panic(err)
+		logger.Log.Error().Err(err)
+		return err
 	}
 
-	storage := repository.NewMemStorage()
+	var storage repository.MetricaStorage
+	var mode repository.MetricaStorageMode
 
-	if config.RestoreFromFileStorage {
-		err = repository.LoadDataFromFile(config.FileStorageName, storage)
+	if config.StoreInterval == 0 {
+		mode = repository.MetricaStorageModeSync
+	} else {
+		mode = repository.MetricaStorageModeAsync
+	}
+
+	//Всегда создаем memStorage
+	memStorage := repository.NewMemStorage()
+
+	//Дальше пытаемся подобрать реальный Storage по параметрам
+	if config.DatabaseDSN != "" {
+		//Создаем подключение
+		conn, err := sql.Open("pgx", config.DatabaseDSN)
 		if err != nil {
-			logger.Log.Error().Msg("Ошибка при загрузке даннных из файла  " + config.FileStorageName + ":" + err.Error())
+			return err
 		}
+		defer conn.Close()
+
+		//Проверяем подключение
+		if err := conn.Ping(); err != nil {
+			return err
+		}
+
+		//Создаем driver для migrate используя существующее подключение
+		driver, err := postgres.WithInstance(conn, &postgres.Config{})
+		if err != nil {
+			return err
+		}
+
+		//Создаем экземпляр migrate
+		m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
+		if err != nil {
+			return err
+		}
+
+		//Запускаем миграции
+		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+			return err
+		}
+
+		//Хранение в БД постгри
+		pgStorage, err := repository.NewPGStorage(memStorage, conn, mode)
+		if err != nil {
+			logger.Log.Error().Err(err)
+			return err
+		}
+		storage = pgStorage
+
+	} else if config.FileStorageName != "" {
+		//Хранение в файле
+		fileStorage, err := repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
+		if err != nil {
+			logger.Log.Error().Err(err)
+			return err
+		}
+		storage = fileStorage
+
+	} else {
+		//Хранение в памяти
+		storage = memStorage
+
 	}
 
 	var wg sync.WaitGroup
 
-	if config.StoreInterval == 0 {
+	//На самом деле этот кусочек имеет смысл только если у storage есть куда сохранять данные
+	//А вообще конечно передаю привет тому извращенцу который придумал эту логику, а так же наставикам курса которые не могут сказать как это предпологалось сделать
+	if mode == repository.MetricaStorageModeAsync {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			logger.Log.Debug().Msg("Запуск EventSaver")
-			repository.EventSaver(ctx, config.FileStorageName, storage)
-			cancel()
-		}()
-	}
-
-	if config.StoreInterval > 0 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			logger.Log.Debug().Msg("Запуск TimeSaver")
-			repository.TimeSaver(ctx, config.FileStorageName, config.StoreInterval, storage)
+			logger.Log.Debug().Msg("Запуск TickerWriteMetrics")
+			repository.TickerWriteMetrics(ctx, storage, config.StoreInterval)
 			cancel()
 		}()
 	}
@@ -70,7 +132,10 @@ func main() {
 		defer wg.Done()
 		logger.Log.Debug().Msg("Запуск HttpServer")
 		err := server.ListenAndServe()
-		logger.Log.Error().Msg("Ошибка в работе сервера ListenAndServe:" + err.Error())
+		if ctx.Err() == nil {
+			//Ошибку отображаем только если контекст не завершен
+			logger.Log.Error().Msg("Ошибка в работе сервера ListenAndServe:" + err.Error())
+		}
 		cancel()
 	}()
 
@@ -92,4 +157,6 @@ func main() {
 
 	logger.Log.Info().Msg("Сервер HttpServer остановлен")
 	wg.Wait()
+
+	return nil
 }

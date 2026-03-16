@@ -11,6 +11,8 @@ type Metrica interface {
 	Value() string
 	Kind() KindValue
 	UpdateValue(Metrica) error
+	Restore()
+	Confirm()
 }
 
 // Фабрика метрик

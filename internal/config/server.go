@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"regexp"
 	"strconv"
 )
 
@@ -12,6 +13,7 @@ type ConfigServer struct {
 	StoreInterval          int
 	FileStorageName        string
 	RestoreFromFileStorage bool
+	DatabaseDSN            string
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -24,6 +26,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 	fs.IntVar(&cfg.StoreInterval, "i", 300, "StoreInterval - time in sec after which data would be save in file")
 	fs.StringVar(&cfg.FileStorageName, "f", "TempFileStorage", "filename for soraging data")
 	fs.BoolVar(&cfg.RestoreFromFileStorage, "r", false, "Load data from file on start")
+	fs.StringVar(&cfg.DatabaseDSN, "d", "", "Connection string for postgresql")
 
 	fs.Parse(os.Args[1:])
 
@@ -57,6 +60,20 @@ func ParseParamsServer() (*ConfigServer, error) {
 		} else {
 			cfg.RestoreFromFileStorage = false
 		}
+	}
+
+	if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
+		cfg.DatabaseDSN = envDatabaseDSN
+	}
+
+	//Дополнительные проверки параметров
+	if cfg.DatabaseDSN != "" {
+
+		matched, _ := regexp.MatchString(`^postgres://.*/.*?sslmode=.*$`, cfg.DatabaseDSN)
+		if !matched {
+			return nil, fmt.Errorf("неверный формат строки подключения к БД PostgreSQL (%s)", cfg.DatabaseDSN)
+		}
+
 	}
 
 	return &cfg, nil
