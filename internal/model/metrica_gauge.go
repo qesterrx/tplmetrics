@@ -7,7 +7,7 @@ import (
 )
 
 func FormatMetricaGauge(value float64) string {
-	return strings.TrimRight(fmt.Sprintf("%.3f", value), "0")
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.3f", value), "0"), ".")
 }
 
 type MetricaGauge struct {
