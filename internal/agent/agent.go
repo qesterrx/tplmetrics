@@ -122,7 +122,7 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 	//Тут определим middleware агента
 	client.OnBeforeRequest(GzipCompressMiddleware) //Сначала зипуем
 	if secretKeyForSign != "" {
-		client.OnBeforeRequest(HMACSignMiddleware("secret")) //Затем подписываем
+		client.OnBeforeRequest(HMACSignMiddleware(secretKeyForSign)) //Затем подписываем
 	}
 
 	for {
