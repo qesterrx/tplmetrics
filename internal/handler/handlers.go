@@ -9,17 +9,20 @@ import (
 	"text/template"
 
 	"github.com/go-chi/chi"
-	"github.com/qesterrx/tplmetrics/internal/compression"
 	"github.com/qesterrx/tplmetrics/internal/logger"
+	"github.com/qesterrx/tplmetrics/internal/middleware"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
 
-func GetRouter(storage repository.MetricaStorage) chi.Router {
+func GetRouter(storage repository.MetricaStorage, secretKeyForSign string) chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(logger.LoggingMiddleware)
-	r.Use(compression.GzipCompressMiddleware)
+	r.Use(middleware.LoggingMiddleware)
+	if secretKeyForSign != "" {
+		r.Use(middleware.HMACSignMiddleware(secretKeyForSign)) //Это важно! подпись вычислялась после сжатия, значит проверять ее надо ДО распаковки
+	}
+	r.Use(middleware.GzipCompressMiddleware)
 
 	r.Get(`/value/{kind}/{name}`, GetMetricaHandler(storage))
 	r.Get(`/`, GetAllCurrentMetricsHandler(storage))
@@ -109,7 +112,6 @@ func GetMetricaHandler(ms repository.MetricaStorage) http.HandlerFunc {
 		}
 
 		io.WriteString(w, mtrk.Value())
-		w.WriteHeader(http.StatusOK)
 
 	})
 }

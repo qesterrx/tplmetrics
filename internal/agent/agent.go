@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -104,7 +107,7 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 }
 
 /*Процедура через reportInterval вычитывает очередь toGroup, группирует gauge метрики и ставит в очередь на отправку toSend в виде []byte*/
-func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval int, url string) {
+func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval int, url string, secretKeyForSign string) {
 	logger.Log.Debug().Msg("Запуск Reporter")
 
 	ticker := time.NewTicker(time.Second * time.Duration(reportInterval))
@@ -115,6 +118,12 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 
 	//Клиента создаем один раз
 	client := resty.New()
+
+	//Тут определим middleware агента
+	client.OnBeforeRequest(GzipCompressMiddleware) //Сначала зипуем
+	if secretKeyForSign != "" {
+		client.OnBeforeRequest(HMACSignMiddleware("secret")) //Затем подписываем
+	}
 
 	for {
 		select {
@@ -194,26 +203,14 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 }
 
 /*Процедура отвечает только за отправку уже сериализованных данных*/
-func Send(ctx context.Context, client *resty.Client, url string, srcBody []byte) error {
+func Send(ctx context.Context, client *resty.Client, url string, body []byte) error {
 
 	//замыкание для вызова в retry.RetryFunc
 	fn := func() error {
-		var compressed bytes.Buffer
-
-		gzWriter := gzip.NewWriter(&compressed)
-
-		_, err := gzWriter.Write(srcBody)
-		if err != nil {
-			return fmt.Errorf("sender ошибка компрессии gzip %w", err)
-		}
-
-		// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
-		gzWriter.Close()
 
 		resp, err := client.R().
-			SetHeader("Content-Encoding", "gzip").
 			SetHeader("Content-Type", "application/json").
-			SetBody(compressed.Bytes()).
+			SetBody(body).
 			Post(url)
 
 		if err != nil {
@@ -233,3 +230,76 @@ func Send(ctx context.Context, client *resty.Client, url string, srcBody []byte)
 	return retry.RetryFunc(ctx, fn, checkRetryRequest, 3, 1*time.Second, 2*time.Second)
 
 }
+
+func GzipCompressMiddleware(c *resty.Client, r *resty.Request) error {
+	if r.Body != nil {
+
+		//r.Body это интерфейс, очередной type assertion
+		var srcBody []byte
+		switch tmp := r.Body.(type) {
+		case string:
+			srcBody = []byte(tmp)
+		case []byte:
+			srcBody = tmp
+		default:
+			//Если тело не то что мы предпологали то просто ничего не делаем
+			return nil
+		}
+
+		var compressed bytes.Buffer
+
+		gzWriter := gzip.NewWriter(&compressed)
+
+		_, err := gzWriter.Write(srcBody)
+		if err != nil {
+			return fmt.Errorf("sender ошибка компрессии gzip %w", err)
+		}
+
+		// Важно! Закрываем writer, чтобы сбросить все данные в буфер - эх время мое время
+		gzWriter.Close()
+
+		//Добавляем заголовок, переписываем Body
+		r.SetHeader("Content-Encoding", "gzip")
+		r.SetBody(compressed.Bytes())
+
+	}
+
+	return nil
+
+}
+
+func HMACSignMiddleware(key string) resty.RequestMiddleware {
+
+	secret := []byte(key)
+
+	return func(c *resty.Client, r *resty.Request) error {
+		if r.Body != nil {
+
+			//r.Body это интерфейс - type assertion
+			var srcBody []byte
+			switch tmp := r.Body.(type) {
+			case string:
+				srcBody = []byte(tmp)
+			case []byte:
+				srcBody = tmp
+			default:
+				//Если тело не то что мы предпологали то просто ничего не делаем
+				return nil
+			}
+
+			//считаем хешь, по идее нужна общая функция для клиента и сервереа но и таааак сойдет
+			hash := hmac.New(sha256.New, secret)
+			hash.Write(srcBody)
+			sign := hash.Sum(nil)
+
+			//Записываем заголовок
+			r.SetHeader("HashSHA256", base64.StdEncoding.EncodeToString(sign))
+
+		}
+
+		return nil
+	}
+
+}
+
+/*Вообще конечно бросается в глаза то что можно было обойтись одной middleware или вообще без них...*/

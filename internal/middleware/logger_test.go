@@ -1,4 +1,4 @@
-package logger
+package middleware
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 )
@@ -16,7 +17,7 @@ func TestLoggingMiddleware(t *testing.T) {
 	log := zerolog.New(&buf).With().Timestamp().Logger()
 	zerolog.SetGlobalLevel(zerolog.InfoLevel)
 
-	Log = log
+	logger.Log = log
 
 	// Тестовый обработчик
 	handler := LoggingMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

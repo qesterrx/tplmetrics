@@ -47,7 +47,7 @@ func RunAgent(config *config.ConfigAgent) {
 	go func() {
 		defer wg.Done()
 		url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
-		agent.Reporter(ctx, queueToGroup, config.ReportInterval, url)
+		agent.Reporter(ctx, queueToGroup, config.ReportInterval, url, config.SecretKeyForSign)
 		cancel()
 	}()
 

@@ -14,6 +14,7 @@ type ConfigAgent struct {
 	PoolInterval     int
 	ReportInterval   int
 	ClientErrorCount int
+	SecretKeyForSign string
 }
 
 func ParseParamsAgent() (*ConfigAgent, error) {
@@ -29,6 +30,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 
 	fs.IntVar(&cfg.PoolInterval, "p", 2, "PoolInterval - time in sec after which collecting mertic (>=1)")
 	fs.IntVar(&cfg.ReportInterval, "r", 10, "ReportInterval - time in sec after which sending to server (>=1)")
+	fs.StringVar(&cfg.SecretKeyForSign, "k", "", "SecretKeyForSign - key for sign data in header HashSHA256")
 
 	fs.Parse(os.Args[1:])
 
@@ -57,6 +59,10 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 			return nil, fmt.Errorf("env $REPORT_INTERVAL has wrong format: %v", err.Error())
 		}
 		cfg.ReportInterval = int(intReportInterval)
+	}
+
+	if envKey := os.Getenv("KEY"); envKey != "" {
+		cfg.SecretKeyForSign = envKey
 	}
 
 	//Дополнительные проверки параметров

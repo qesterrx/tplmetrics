@@ -14,6 +14,7 @@ type ConfigServer struct {
 	FileStorageName        string
 	RestoreFromFileStorage bool
 	DatabaseDSN            string
+	SecretKeyForSign       string
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -27,6 +28,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 	fs.StringVar(&cfg.FileStorageName, "f", "TempFileStorage", "filename for soraging data")
 	fs.BoolVar(&cfg.RestoreFromFileStorage, "r", false, "Load data from file on start")
 	fs.StringVar(&cfg.DatabaseDSN, "d", "", "Connection string for postgresql")
+	fs.StringVar(&cfg.SecretKeyForSign, "k", "", "SecretKeyForSign - key for sign data in header HashSHA256")
 
 	fs.Parse(os.Args[1:])
 
@@ -64,6 +66,10 @@ func ParseParamsServer() (*ConfigServer, error) {
 
 	if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
 		cfg.DatabaseDSN = envDatabaseDSN
+	}
+
+	if envKey := os.Getenv("KEY"); envKey != "" {
+		cfg.SecretKeyForSign = envKey
 	}
 
 	//Дополнительные проверки параметров

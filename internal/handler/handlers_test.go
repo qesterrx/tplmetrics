@@ -16,7 +16,7 @@ import (
 func TestGetAllCurrentMetricsHandler(t *testing.T) {
 
 	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	router := GetRouter(storage, "")
 
 	tests := []struct {
 		name       string
@@ -53,7 +53,7 @@ func TestGetAllCurrentMetricsHandler(t *testing.T) {
 func TestGetMetricaHandler(t *testing.T) {
 
 	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	router := GetRouter(storage, "")
 
 	storage.UpdateMetrica(model.NewMetricaCounter("c1", 5))
 	storage.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
@@ -131,7 +131,7 @@ func TestGetMetricaHandler(t *testing.T) {
 func TestUpdateMetricaHandler(t *testing.T) {
 
 	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	router := GetRouter(storage, "")
 
 	tests := []struct {
 		name        string
@@ -186,7 +186,7 @@ func TestUpdateMetricaHandler(t *testing.T) {
 func TestUpdateMetricaJSONHandler(t *testing.T) {
 
 	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	router := GetRouter(storage, "")
 
 	tests := []struct {
 		name        string
@@ -248,7 +248,7 @@ func TestUpdateMetricaJSONHandler(t *testing.T) {
 
 func TestGetMetricaJSONHandler(t *testing.T) {
 	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	router := GetRouter(storage, "")
 
 	storage.UpdateMetrica(model.NewMetricaCounter("c1", 5))
 	storage.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))

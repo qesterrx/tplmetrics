@@ -124,7 +124,7 @@ func run() error {
 
 	server := &http.Server{
 		Addr:    config.ServerHost.String(),
-		Handler: handler.GetRouter(storage),
+		Handler: handler.GetRouter(storage, config.SecretKeyForSign),
 	}
 
 	wg.Add(1)
