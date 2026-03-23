@@ -14,6 +14,7 @@ type ConfigAgent struct {
 	PoolInterval     int
 	ReportInterval   int
 	ClientErrorCount int
+	RateLimit        int
 	SecretKeyForSign string
 }
 
@@ -29,6 +30,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	fs.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
 
 	fs.IntVar(&cfg.PoolInterval, "p", 2, "PoolInterval - time in sec after which collecting mertic (>=1)")
+	fs.IntVar(&cfg.RateLimit, "l", 1, "RateLimit - count of clients for send metric (>=1)")
 	fs.IntVar(&cfg.ReportInterval, "r", 10, "ReportInterval - time in sec after which sending to server (>=1)")
 	fs.StringVar(&cfg.SecretKeyForSign, "k", "", "SecretKeyForSign - key for sign data in header HashSHA256")
 
@@ -61,6 +63,14 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.ReportInterval = int(intReportInterval)
 	}
 
+	if envRateLimit := os.Getenv("RATE_LIMIT"); envRateLimit != "" {
+		intRateLimit, err := strconv.ParseInt(envRateLimit, 10, 0)
+		if err != nil {
+			return nil, fmt.Errorf("env $RATE_LIMIT has wrong format: %v", err.Error())
+		}
+		cfg.RateLimit = int(intRateLimit)
+	}
+
 	if envKey := os.Getenv("KEY"); envKey != "" {
 		cfg.SecretKeyForSign = envKey
 	}
@@ -72,6 +82,10 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 
 	if cfg.ReportInterval < 1 {
 		return nil, fmt.Errorf("ReportInterval can't be less 1, got %d, check flag -r and ENV $REPORT_INTERVAL", cfg.ReportInterval)
+	}
+
+	if cfg.RateLimit < 1 {
+		return nil, fmt.Errorf("RateLimit can't be less 1, got %d, check flag -p and ENV $RATE_LIMIT", cfg.RateLimit)
 	}
 
 	return &cfg, nil

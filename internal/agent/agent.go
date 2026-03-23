@@ -13,6 +13,7 @@ import (
 	"math/rand/v2"
 	"net/http"
 	"runtime"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -20,6 +21,9 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/retry"
+
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // Если честно - не понятно какие ошибки переотправлять а какие нет. Если это важно почему этому не научили или хотя бы не тыкнули носом во что-то полезное.
@@ -100,14 +104,50 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 
 			counter++
 
-			logger.Log.Debug().Msg("Метрики собраны")
+			logger.Log.Debug().Msg("Collector Метрики собраны")
 		}
 	}
 
 }
 
+/*Мда...*/
+func CollectorAdd(ctx context.Context, toGroup chan<- model.Metrica, pollInterval int) {
+
+	logger.Log.Debug().Msg("Запуск CollectorAdd")
+
+	ticker := time.NewTicker(time.Second * time.Duration(pollInterval))
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			//Если получили сигнал завершения - останавливаемся
+			logger.Log.Debug().Msg("Остановка CollectorAdd по контексту")
+			return
+		case <-ticker.C:
+			mmInfo, err := mem.VirtualMemory()
+			if err != nil {
+				logger.Log.Error().Msg("Ошибка сборка метрик mem.VirtualMemory:" + err.Error())
+			}
+
+			cpuCount, err := cpu.Counts(true)
+			if err != nil {
+				logger.Log.Error().Msg("Ошибка сборка метрик cpu.Counts:" + err.Error())
+			}
+
+			toGroup <- model.NewMetricaGauge("TotalMemory", float64(mmInfo.Total))
+			toGroup <- model.NewMetricaGauge("FreeMemory", float64(mmInfo.Free))
+			toGroup <- model.NewMetricaGauge("CPUutilization1", float64(cpuCount))
+
+			logger.Log.Debug().Msg("CollectorAdd Метрики собраны")
+		}
+
+	}
+
+}
+
 /*Процедура через reportInterval вычитывает очередь toGroup, группирует gauge метрики и ставит в очередь на отправку toSend в виде []byte*/
-func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval int, url string, secretKeyForSign string) {
+func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- []byte, reportInterval int) {
 	logger.Log.Debug().Msg("Запуск Reporter")
 
 	ticker := time.NewTicker(time.Second * time.Duration(reportInterval))
@@ -115,15 +155,6 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 
 	//в данной структуре будем группировать данные из очереди, кроме того с помощью нее обеспечим транзакционность
 	groupMap := map[string]model.Metrica{}
-
-	//Клиента создаем один раз
-	client := resty.New()
-
-	//Тут определим middleware агента
-	client.OnBeforeRequest(GzipCompressMiddleware) //Сначала зипуем
-	if secretKeyForSign != "" {
-		client.OnBeforeRequest(HMACSignMiddleware(secretKeyForSign)) //Затем подписываем
-	}
 
 	for {
 		select {
@@ -140,7 +171,7 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 				select {
 				case <-ctx.Done():
 					//Если получили сигнал завершения останавливаемся
-					logger.Log.Debug().Msg("Остановка Compressor по контексту")
+					logger.Log.Debug().Msg("Остановка Reporter по контексту")
 					return
 				case metrica := <-toGroup:
 					//Группировка
@@ -185,18 +216,42 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, reportInterval 
 			logger.Log.Debug().Msg(fmt.Sprintf("Попытка отправить массив метрик, количество %d", len(mtrks)))
 
 			//Отправка данных
-			err = Send(ctx, client, url, body)
+			toSend <- body
+
+			//... и каков ответ на главный вопрос жизни, вселенной и всего такого
+			groupMap = map[string]model.Metrica{}
+
+		}
+	}
+
+}
+
+func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string) {
+	logger.Log.Debug().Msg("Запуск Sender")
+
+	//Клиента создаем один раз
+	client := resty.New()
+
+	//Тут определим middleware агента
+	client.OnBeforeRequest(GzipCompressMiddleware) //Сначала зипуем
+	if secretKeyForSign != "" {
+		client.OnBeforeRequest(HMACSignMiddleware(secretKeyForSign)) //Затем подписываем
+	}
+
+	for {
+		select {
+		case <-ctx.Done():
+			//Если получили сигнал завершения останавливаемся
+			logger.Log.Debug().Msg("Остановка Sender по контексту")
+			return
+		case msg := <-toSend:
+			err := Send(ctx, client, url, msg)
 
 			if err != nil {
 				logger.Log.Error().Msg(err.Error())
 			} else {
-				logger.Log.Debug().Msg("Успешная отправка: " + string(body))
-				//Вот хвост транзакционности, если метрики отправили то следующая обработка начнет группировку заново
-				//  если была ошибка то в groupMap остаются записи и следующая группировка будет их обновлять
-				//  естественно, ожидаем что сервер либо принимает все метрики либо ни одной (т.е. от него тоже ждем транзакционности)
-				groupMap = map[string]model.Metrica{}
+				logger.Log.Debug().Msg("Метрики отправлены [Sender " + strconv.Itoa(num) + "]")
 			}
-
 		}
 	}
 

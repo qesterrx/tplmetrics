@@ -31,6 +31,7 @@ func RunAgent(config *config.ConfigAgent) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	queueToGroup := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
+	queueToSend := make(chan []byte, config.RateLimit)
 
 	wg := sync.WaitGroup{}
 
@@ -42,14 +43,32 @@ func RunAgent(config *config.ConfigAgent) {
 		cancel()
 	}()
 
+	//Дополнительный сборщик записывает метрики в queueToGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		agent.CollectorAdd(ctx, queueToGroup, config.PoolInterval)
+		cancel()
+	}()
+
 	//Репортер берет метрики из queueToGroup, группирует, сериализует и пытается отправить
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
-		agent.Reporter(ctx, queueToGroup, config.ReportInterval, url, config.SecretKeyForSign)
+		agent.Reporter(ctx, queueToGroup, queueToSend, config.ReportInterval)
 		cancel()
 	}()
+
+	//Пул сендеров занимается отправкой
+	for i := 1; i <= config.RateLimit; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
+			agent.Sender(ctx, queueToSend, i, url, config.SecretKeyForSign)
+			cancel()
+		}()
+	}
 
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
