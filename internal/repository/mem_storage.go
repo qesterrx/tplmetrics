@@ -48,12 +48,10 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	mtrkSaved, ok := ms.storage[key]
 	if ok {
-		err := mtrkSaved.UpdateValue(mtrk)
+		err := mtrkSaved.UpdateValueAtomic(mtrk)
 		if err != nil {
-			mtrkSaved.Restore()
 			return err
 		}
-		mtrkSaved.Confirm()
 	} else {
 		ms.storage[key] = mtrk
 		ms.keys = append(ms.keys, key)
@@ -132,7 +130,7 @@ func (ms *MemStorage) startUpdateMetricaBatch(mtrks []model.Metrica) (*[]*model.
 
 		mtrkSaved, ok := ms.storage[key]
 		if ok {
-			err := mtrkSaved.UpdateValue(mtrk)
+			err := mtrkSaved.UpdateValueStart(mtrk)
 			if err != nil {
 				return &touched, err
 			}

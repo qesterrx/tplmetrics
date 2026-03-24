@@ -181,13 +181,11 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- [
 					case model.Counter:
 						oldMetrica, ok := groupMap[metrica.Name()]
 						if ok {
-							err := oldMetrica.UpdateValue(metrica)
+							err := oldMetrica.UpdateValueAtomic(metrica)
 							if err != nil {
-								oldMetrica.Restore()
 								logger.Log.Error().Msg("Ошибка обновления метрики " + err.Error())
 								continue
 							}
-							oldMetrica.Confirm()
 						} else {
 							groupMap[metrica.Name()] = metrica
 						}
