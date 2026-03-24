@@ -54,10 +54,13 @@ func TestGzipCompressMiddleware(t *testing.T) {
 	// Выполняем запрос
 	handler.ServeHTTP(w, req)
 
-	assert.Equal(t, http.StatusOK, w.Result().StatusCode)
-	assert.Equal(t, "gzip", w.Header().Get("Content-Encoding"))
+	res := w.Result()
+	defer res.Body.Close()
 
-	body, err := io.ReadAll(w.Body)
+	assert.Equal(t, http.StatusOK, res.StatusCode)
+	assert.Equal(t, "gzip", res.Header.Get("Content-Encoding"))
+
+	body, err := io.ReadAll(res.Body)
 
 	assert.NoError(t, err)
 	assert.Equal(t, response, body)
