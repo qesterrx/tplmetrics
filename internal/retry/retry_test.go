@@ -14,8 +14,8 @@ func TestRetry(t *testing.T) {
 	var err error
 
 	//Чекеры ошибок
-	ch_true := func(error) bool { return true }
-	ch_false := func(error) bool { return false }
+	chTrue := func(error) bool { return true }
+	chFalse := func(error) bool { return false }
 
 	//Функция fn возвращающая ошибку
 	fn := func() error {
@@ -26,7 +26,7 @@ func TestRetry(t *testing.T) {
 	//Повторы
 	cnt = 0
 	start := time.Now()
-	err = RetryFunc(t.Context(), fn, ch_true, 3, 10*time.Millisecond, 20*time.Millisecond)
+	err = RetryFunc(t.Context(), fn, chTrue, 3, 10*time.Millisecond, 20*time.Millisecond)
 
 	assert.WithinDuration(t, start.Add((10+20)*time.Millisecond), time.Now(), (10+20+10)*time.Millisecond) //даем 10 мс на выполнение fn
 	assert.Error(t, err)
@@ -35,7 +35,7 @@ func TestRetry(t *testing.T) {
 	//Нет повторов
 	cnt = 0
 	start = time.Now()
-	err = RetryFunc(t.Context(), fn, ch_false, 2, 10*time.Millisecond, 20*time.Millisecond)
+	err = RetryFunc(t.Context(), fn, chFalse, 2, 10*time.Millisecond, 20*time.Millisecond)
 
 	assert.WithinDuration(t, start, time.Now(), 10*time.Millisecond) //даем 10 мс на выполнение fn
 	assert.Error(t, err)
@@ -49,7 +49,7 @@ func TestRetry(t *testing.T) {
 	//Повторы
 	cnt = 0
 	start = time.Now()
-	err = RetryFunc(t.Context(), fn, ch_true, 3, 10*time.Millisecond, 20*time.Millisecond)
+	err = RetryFunc(t.Context(), fn, chTrue, 3, 10*time.Millisecond, 20*time.Millisecond)
 
 	assert.WithinDuration(t, start, time.Now(), 10*time.Millisecond) //даем 10 мс на выполнение fn
 	assert.NoError(t, err)
@@ -58,7 +58,7 @@ func TestRetry(t *testing.T) {
 	//Нет повторов
 	cnt = 0
 	start = time.Now()
-	err = RetryFunc(t.Context(), fn, ch_false, 2, 10*time.Millisecond, 20*time.Millisecond)
+	err = RetryFunc(t.Context(), fn, chFalse, 2, 10*time.Millisecond, 20*time.Millisecond)
 
 	assert.WithinDuration(t, start, time.Now(), 10*time.Millisecond) //даем 10 мс на выполнение fn
 	assert.NoError(t, err)

@@ -8,8 +8,10 @@ import (
 
 func TestGaugeUpdateValueAtomic(t *testing.T) {
 
-	var val1 float64 = 1.111111111111111111
-	var val2 float64 = 2.222222222222222222
+	var val1 float64
+	val1 = 1.111111111111111111
+	var val2 float64
+	val2 = 2.222222222222222222
 
 	mtrk := NewMetricaGauge("a", val1)
 
@@ -28,8 +30,10 @@ func TestGaugeUpdateValueAtomic(t *testing.T) {
 
 func TestGaugeUpdateValueConfirm(t *testing.T) {
 
-	var val1 float64 = 1.111111111111111111
-	var val2 float64 = 2.222222222222222222
+	var val1 float64
+	val1 = 1.111111111111111111
+	var val2 float64
+	val2 = 2.222222222222222222
 
 	mtrk := NewMetricaGauge("a", val1)
 
@@ -46,8 +50,10 @@ func TestGaugeUpdateValueConfirm(t *testing.T) {
 
 func TestGaugeUpdateValueRestore(t *testing.T) {
 
-	var val1 float64 = 1.111111111111111111
-	var val2 float64 = 2.222222222222222222
+	var val1 float64
+	val1 = 1.111111111111111111
+	var val2 float64
+	val2 = 2.222222222222222222
 
 	mtrk := NewMetricaGauge("a", val1)
 

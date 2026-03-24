@@ -13,7 +13,7 @@ import (
 
 func TestGzipCompressMiddleware(t *testing.T) {
 
-	gzip_func := func(msg []byte) ([]byte, error) {
+	gzipFunc := func(msg []byte) ([]byte, error) {
 		var buf bytes.Buffer
 		gzw := gzip.NewWriter(&buf)
 		_, err := gzw.Write([]byte(msg))
@@ -28,13 +28,14 @@ func TestGzipCompressMiddleware(t *testing.T) {
 	}
 
 	//Получим ожидаемый результат
-	request, err := gzip_func([]byte("Request"))
+	request, err := gzipFunc([]byte("Request"))
 	assert.NoError(t, err)
-	response, err := gzip_func([]byte("Request-Response"))
+	response, err := gzipFunc([]byte("Request-Response"))
 	assert.NoError(t, err)
 
 	// Тестовый обработчик
 	handler := GzipCompressMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
 		req, err := io.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -57,6 +58,7 @@ func TestGzipCompressMiddleware(t *testing.T) {
 	assert.Equal(t, "gzip", w.Header().Get("Content-Encoding"))
 
 	body, err := io.ReadAll(w.Body)
+
 	assert.NoError(t, err)
 	assert.Equal(t, response, body)
 

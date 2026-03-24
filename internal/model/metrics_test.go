@@ -20,6 +20,6 @@ func TestNewMetrica(t *testing.T) {
 	assert.Equal(t, "mtrk_g", mtrk.Name())
 	assert.Equal(t, Gauge, mtrk.Kind())
 
-	mtrk, err = NewMetrica("mtrk_g", "UNKNWN", "1")
+	_, err = NewMetrica("mtrk_g", "UNKNWN", "1")
 	assert.Error(t, err)
 }
