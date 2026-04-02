@@ -160,7 +160,7 @@ func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *h
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	//w.Write([]byte("{}"))
+	w.Write([]byte("{}"))
 
 }
 
@@ -253,6 +253,6 @@ func (hc *HandlerContainer) UpdateMetricsJSONHandler(w http.ResponseWriter, r *h
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	//w.Write([]byte("{}"))
+	w.Write([]byte("{}"))
 
 }
