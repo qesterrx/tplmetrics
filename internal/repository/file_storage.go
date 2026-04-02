@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
@@ -14,13 +15,13 @@ import (
 type FileStorage struct {
 	MemStorage
 	filename   string
-	mode       MetricaStorageMode
+	mode       config.MetricaStorageMode
 	restore    bool
 	hasChanged bool
 }
 
 // Фабрика
-func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, restore bool) (*FileStorage, error) {
+func NewFileStorage(ms *MemStorage, filename string, mode config.MetricaStorageMode, restore bool) (*FileStorage, error) {
 
 	logger.Log.Debug().Msg("Создание FileStorage")
 	//Проверяем существование файла, если файла нет надо его создать
@@ -73,7 +74,7 @@ func NewFileStorage(ms *MemStorage, filename string, mode MetricaStorageMode, re
 
 // Получение метрики по имени
 func (fs *FileStorage) Metrica(name string, kind string) (model.Metrica, error) {
-	return fs.MemStorage.Metrica(name, kind)
+	return fs.MemStorage.GetMetrica(name, kind)
 }
 
 // Обновление метрики
@@ -85,7 +86,7 @@ func (fs *FileStorage) UpdateMetrica(mtrk model.Metrica) error {
 	}
 
 	fs.hasChanged = true
-	if fs.mode == MetricaStorageModeSync {
+	if fs.mode == config.MetricaStorageModeSync {
 		err := fs.WriteMetrics()
 		if err != nil {
 			return err
@@ -103,7 +104,7 @@ func (fs *FileStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	}
 
 	fs.hasChanged = true
-	if fs.mode == MetricaStorageModeSync {
+	if fs.mode == config.MetricaStorageModeSync {
 		err := fs.WriteMetrics()
 		if err != nil {
 			return err
@@ -115,7 +116,7 @@ func (fs *FileStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
 // Получение всех сохраненных, с сортировкой по имени
 func (fs *FileStorage) AllMetrics() []model.Metrica {
-	return fs.MemStorage.AllMetrics()
+	return fs.MemStorage.GetAllMetrics()
 }
 
 // Показываем текущее состояние в output
@@ -129,7 +130,7 @@ func (fs *FileStorage) WriteMetrics() error {
 
 		logger.Log.Debug().Msg("Синхронизация данных в файл")
 
-		mtrks := fs.MemStorage.AllMetrics()
+		mtrks := fs.MemStorage.GetAllMetrics()
 
 		bytes, err := json.Marshal(&mtrks)
 		if err != nil {

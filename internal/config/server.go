@@ -8,6 +8,13 @@ import (
 	"strconv"
 )
 
+type MetricaStorageMode string
+
+const (
+	MetricaStorageModeSync  MetricaStorageMode = "sync"
+	MetricaStorageModeAsync MetricaStorageMode = "async"
+)
+
 type ConfigServer struct {
 	ServerHost             NetAddress
 	StoreInterval          int
@@ -15,6 +22,7 @@ type ConfigServer struct {
 	RestoreFromFileStorage bool
 	DatabaseDSN            string
 	SecretKeyForSign       string
+	StorageMode            MetricaStorageMode
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -80,6 +88,13 @@ func ParseParamsServer() (*ConfigServer, error) {
 			return nil, fmt.Errorf("неверный формат строки подключения к БД PostgreSQL (%s)", cfg.DatabaseDSN)
 		}
 
+	}
+
+	//Дополнительная трансляция параметров
+	if cfg.StoreInterval == 0 {
+		cfg.StorageMode = MetricaStorageModeSync
+	} else {
+		cfg.StorageMode = MetricaStorageModeAsync
 	}
 
 	return &cfg, nil

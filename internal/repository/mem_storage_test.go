@@ -21,7 +21,7 @@ func TestUpdateMetrica(t *testing.T) {
 	err = mm.UpdateMetrica(model.NewMetricaCounter("c1", 1))
 	assert.NoError(t, err)
 
-	c1, err := mm.Metrica("c1", string(model.Counter))
+	c1, err := mm.GetMetrica("c1", string(model.Counter))
 
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaCounter(int64(2)), c1.Value())
@@ -33,7 +33,7 @@ func TestUpdateMetrica(t *testing.T) {
 	err = mm.UpdateMetrica(model.NewMetricaGauge("g1", 2.2222))
 	assert.NoError(t, err)
 
-	g1, err := mm.Metrica("g1", string(model.Gauge))
+	g1, err := mm.GetMetrica("g1", string(model.Gauge))
 
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaGauge(float64(2.2222)), g1.Value())
@@ -53,17 +53,17 @@ func TestGetMetric(t *testing.T) {
 	err = mm.UpdateMetrica(model.NewMetricaGauge("g1", counterGauge))
 	require.NoError(t, err)
 
-	mtrk, err := mm.Metrica("c1", string(model.Counter))
+	mtrk, err := mm.GetMetrica("c1", string(model.Counter))
 	assert.NoError(t, err)
 	assert.Equal(t, model.Counter, mtrk.Kind())
 	assert.Equal(t, model.FormatMetricaCounter(counterValue), mtrk.Value())
 
-	mtrk, err = mm.Metrica("g1", string(model.Gauge))
+	mtrk, err = mm.GetMetrica("g1", string(model.Gauge))
 	assert.NoError(t, err)
 	assert.Equal(t, model.Gauge, mtrk.Kind())
 	assert.Equal(t, model.FormatMetricaGauge(counterGauge), mtrk.Value())
 
-	_, err = mm.Metrica("notfound", "counter")
+	_, err = mm.GetMetrica("notfound", "counter")
 	assert.Error(t, err)
 
 }
