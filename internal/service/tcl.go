@@ -52,7 +52,6 @@ func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 		if err != nil {
 			return nil, err
 		}
-		defer conn.Close()
 
 		//Проверяем подключение
 		if err := conn.Ping(); err != nil {
@@ -98,6 +97,8 @@ func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 		storage = memStorage
 
 	}
+
+	storage.Debug()
 
 	return &TCLService{config: config, storage: storage}, nil
 }

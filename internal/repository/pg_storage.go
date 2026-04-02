@@ -17,7 +17,7 @@ import (
 /*Реализация интерфейса MetricaStorage для хранения данных в БД PostgreSQL*/
 
 type PGStorage struct {
-	MemStorage
+	*MemStorage
 	mode       config.MetricaStorageMode
 	hasChanged bool
 	db         *sql.DB
@@ -47,7 +47,7 @@ func NewPGStorage(ms *MemStorage, db *sql.DB, mode config.MetricaStorageMode) (*
 	logger.Log.Debug().Msg("Создание PGStorage")
 
 	pgs := PGStorage{
-		MemStorage: *ms,
+		MemStorage: ms,
 		mode:       mode,
 		hasChanged: false,
 		db:         db,

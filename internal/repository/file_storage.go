@@ -13,7 +13,7 @@ import (
 /*Реализация интерфейса MetricaStorage для хранения данных в файле*/
 
 type FileStorage struct {
-	MemStorage
+	*MemStorage
 	filename   string
 	mode       config.MetricaStorageMode
 	restore    bool
@@ -34,7 +34,7 @@ func NewFileStorage(ms *MemStorage, filename string, mode config.MetricaStorageM
 	}
 
 	fs := FileStorage{
-		MemStorage: *ms,
+		MemStorage: ms,
 		mode:       mode,
 		hasChanged: false,
 		filename:   filename,
