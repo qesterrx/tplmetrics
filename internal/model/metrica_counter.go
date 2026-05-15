@@ -44,7 +44,26 @@ func (m *MetricaCounter) SrcValue(env string) int64 {
 	return m.value
 }
 
-func (m *MetricaCounter) UpdateValue(mtrk Metrica) error {
+func (m *MetricaCounter) UpdateValueAtomic(mtrk Metrica) error {
+
+	if m.name != mtrk.Name() {
+		return fmt.Errorf("MetricaCounter.UpdateValueAtomic поптыка обновить метрику с несовпадающим наименованием ")
+	}
+
+	if v, ok := mtrk.(*MetricaCounter); ok {
+		m.value = v.value + m.value
+		return nil
+	} else {
+		return fmt.Errorf("MetricaCounter.UpdateValueAtomic type mismatch: want MetricaCounter got %v", mtrk)
+	}
+}
+
+func (m *MetricaCounter) UpdateValueStart(mtrk Metrica) error {
+
+	if m.name != mtrk.Name() {
+		return fmt.Errorf("MetricaCounter.UpdateValueStart поптыка обновить метрику с несовпадающим наименованием ")
+	}
+
 	if v, ok := mtrk.(*MetricaCounter); ok {
 
 		if m.newValue != nil {
@@ -56,7 +75,7 @@ func (m *MetricaCounter) UpdateValue(mtrk Metrica) error {
 			return nil
 		}
 	} else {
-		return fmt.Errorf("MetricaCounter.UpdateValue type mismatch: want MetricaCounter got %v", mtrk)
+		return fmt.Errorf("MetricaCounter.UpdateValueStart type mismatch: want MetricaCounter got %v", mtrk)
 	}
 }
 

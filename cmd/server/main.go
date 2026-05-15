@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,14 +9,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/golang-migrate/migrate/v4"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
-	"github.com/qesterrx/tplmetrics/internal/repository"
+	"github.com/qesterrx/tplmetrics/internal/service"
 	"github.com/rs/zerolog"
 
-	"github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -36,95 +33,43 @@ func run() error {
 	logger.InitLogger()
 	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
-	config, err := config.ParseParamsServer()
+	//Конфигурация
+	cfg, err := config.ParseParamsServer()
 	if err != nil {
 		logger.Log.Error().Err(err)
 		return err
 	}
 
-	var storage repository.MetricaStorage
-	var mode repository.MetricaStorageMode
-
-	if config.StoreInterval == 0 {
-		mode = repository.MetricaStorageModeSync
-	} else {
-		mode = repository.MetricaStorageModeAsync
+	//Сервис
+	tcl, err := service.NewTCLService(cfg)
+	if err != nil {
+		logger.Log.Error().Err(err)
+		return err
 	}
 
-	//Всегда создаем memStorage
-	memStorage := repository.NewMemStorage()
-
-	//Дальше пытаемся подобрать реальный Storage по параметрам
-	if config.DatabaseDSN != "" {
-		//Создаем подключение
-		conn, err := sql.Open("pgx", config.DatabaseDSN)
-		if err != nil {
-			return err
-		}
-		defer conn.Close()
-
-		//Проверяем подключение
-		if err := conn.Ping(); err != nil {
-			return err
-		}
-
-		//Создаем driver для migrate используя существующее подключение
-		driver, err := postgres.WithInstance(conn, &postgres.Config{})
-		if err != nil {
-			return err
-		}
-
-		//Создаем экземпляр migrate
-		m, err := migrate.NewWithDatabaseInstance("file://migrations", "postgres", driver)
-		if err != nil {
-			return err
-		}
-
-		//Запускаем миграции
-		if err := m.Up(); err != nil && err != migrate.ErrNoChange {
-			return err
-		}
-
-		//Хранение в БД постгри
-		pgStorage, err := repository.NewPGStorage(memStorage, conn, mode)
-		if err != nil {
-			logger.Log.Error().Err(err)
-			return err
-		}
-		storage = pgStorage
-
-	} else if config.FileStorageName != "" {
-		//Хранение в файле
-		fileStorage, err := repository.NewFileStorage(memStorage, config.FileStorageName, mode, config.RestoreFromFileStorage)
-		if err != nil {
-			logger.Log.Error().Err(err)
-			return err
-		}
-		storage = fileStorage
-
-	} else {
-		//Хранение в памяти
-		storage = memStorage
-
-	}
+	//Объект с хендлерами
+	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign)
 
 	var wg sync.WaitGroup
 
 	//На самом деле этот кусочек имеет смысл только если у storage есть куда сохранять данные
 	//А вообще конечно передаю привет тому извращенцу который придумал эту логику, а так же наставикам курса которые не могут сказать как это предпологалось сделать
-	if mode == repository.MetricaStorageModeAsync {
+	if cfg.StorageMode == config.MetricaStorageModeAsync {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			logger.Log.Debug().Msg("Запуск TickerWriteMetrics")
-			repository.TickerWriteMetrics(ctx, storage, config.StoreInterval)
+			tcl.TickerWriteMetrics(ctx)
 			cancel()
 		}()
 	}
 
 	server := &http.Server{
-		Addr:    config.ServerHost.String(),
-		Handler: handler.GetRouter(storage),
+		Addr:         cfg.ServerHost.String(),
+		Handler:      hc.GetRouter(),
+		ReadTimeout:  2 * time.Second,  // Максимальное время на чтение запроса
+		WriteTimeout: 4 * time.Second,  // Максимальное время на запись ответа
+		IdleTimeout:  10 * time.Second, // Таймаут для keep-alive соединений
 	}
 
 	wg.Add(1)

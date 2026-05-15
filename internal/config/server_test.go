@@ -25,7 +25,8 @@ func TestParseParamsServer(t *testing.T) {
 				ServerHost:             NetAddress{Host: "localhost", Port: 8080},
 				StoreInterval:          300,
 				FileStorageName:        "TempFileStorage",
-				RestoreFromFileStorage: false},
+				RestoreFromFileStorage: false,
+				StorageMode:            MetricaStorageModeAsync},
 			err: false,
 		},
 		{
@@ -37,7 +38,8 @@ func TestParseParamsServer(t *testing.T) {
 				StoreInterval:          301,
 				FileStorageName:        "TempFileStorage1",
 				RestoreFromFileStorage: true,
-				DatabaseDSN:            "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"},
+				DatabaseDSN:            "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable",
+				StorageMode:            MetricaStorageModeAsync},
 			err: false,
 		},
 		{
@@ -49,7 +51,8 @@ func TestParseParamsServer(t *testing.T) {
 				StoreInterval:          302,
 				FileStorageName:        "TempFileStorage2",
 				RestoreFromFileStorage: true,
-				DatabaseDSN:            "postgres://postgres2:postgres2@localhost:5432/postgres2?sslmode=disable"},
+				DatabaseDSN:            "postgres://postgres2:postgres2@localhost:5432/postgres2?sslmode=disable",
+				StorageMode:            MetricaStorageModeAsync},
 			err: false,
 		},
 	}

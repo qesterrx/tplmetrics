@@ -8,12 +8,21 @@ import (
 	"strconv"
 )
 
+type MetricaStorageMode string
+
+const (
+	MetricaStorageModeSync  MetricaStorageMode = "sync"
+	MetricaStorageModeAsync MetricaStorageMode = "async"
+)
+
 type ConfigServer struct {
 	ServerHost             NetAddress
 	StoreInterval          int
 	FileStorageName        string
 	RestoreFromFileStorage bool
 	DatabaseDSN            string
+	SecretKeyForSign       string
+	StorageMode            MetricaStorageMode
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
@@ -27,6 +36,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 	fs.StringVar(&cfg.FileStorageName, "f", "TempFileStorage", "filename for soraging data")
 	fs.BoolVar(&cfg.RestoreFromFileStorage, "r", false, "Load data from file on start")
 	fs.StringVar(&cfg.DatabaseDSN, "d", "", "Connection string for postgresql")
+	fs.StringVar(&cfg.SecretKeyForSign, "k", "", "SecretKeyForSign - key for sign data in header HashSHA256")
 
 	fs.Parse(os.Args[1:])
 
@@ -66,6 +76,10 @@ func ParseParamsServer() (*ConfigServer, error) {
 		cfg.DatabaseDSN = envDatabaseDSN
 	}
 
+	if envKey := os.Getenv("KEY"); envKey != "" {
+		cfg.SecretKeyForSign = envKey
+	}
+
 	//Дополнительные проверки параметров
 	if cfg.DatabaseDSN != "" {
 
@@ -74,6 +88,13 @@ func ParseParamsServer() (*ConfigServer, error) {
 			return nil, fmt.Errorf("неверный формат строки подключения к БД PostgreSQL (%s)", cfg.DatabaseDSN)
 		}
 
+	}
+
+	//Дополнительная трансляция параметров
+	if cfg.StoreInterval == 0 {
+		cfg.StorageMode = MetricaStorageModeSync
+	} else {
+		cfg.StorageMode = MetricaStorageModeAsync
 	}
 
 	return &cfg, nil

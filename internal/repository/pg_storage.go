@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/retry"
@@ -16,8 +17,8 @@ import (
 /*Реализация интерфейса MetricaStorage для хранения данных в БД PostgreSQL*/
 
 type PGStorage struct {
-	MemStorage
-	mode       MetricaStorageMode
+	*MemStorage
+	mode       config.MetricaStorageMode
 	hasChanged bool
 	db         *sql.DB
 }
@@ -41,12 +42,12 @@ func checkRetryPg(err error) bool {
 }
 
 // Фабрика
-func NewPGStorage(ms *MemStorage, db *sql.DB, mode MetricaStorageMode) (*PGStorage, error) {
+func NewPGStorage(ms *MemStorage, db *sql.DB, mode config.MetricaStorageMode) (*PGStorage, error) {
 
 	logger.Log.Debug().Msg("Создание PGStorage")
 
 	pgs := PGStorage{
-		MemStorage: *ms,
+		MemStorage: ms,
 		mode:       mode,
 		hasChanged: false,
 		db:         db,
@@ -104,16 +105,17 @@ func NewPGStorage(ms *MemStorage, db *sql.DB, mode MetricaStorageMode) (*PGStora
 }
 
 // Получение метрики по имени
-func (pgs *PGStorage) Metrica(name string, kind string) (model.Metrica, error) {
-	//т.к. в памяти у нас хеш то тут напрямую к БД не обращаемся
-	return pgs.MemStorage.Metrica(name, kind)
+func (pgs *PGStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
+	//т.к. в памяти у нас кеш то тут напрямую к БД не обращаемся
+	//главное чтобы экзепляр приложения был один и никто другой метрики не менял в БД/ФАЙЛЕ
+	return pgs.MemStorage.GetMetrica(name, kind)
 }
 
 // Обновление метрики
 func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	//Если асинхрон - то просто признак и выходим
-	if pgs.mode != MetricaStorageModeSync {
+	if pgs.mode != config.MetricaStorageModeSync {
 
 		err := pgs.MemStorage.UpdateMetrica(mtrk)
 		if err != nil {
@@ -178,7 +180,7 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	}
 
 	//Если асинхрон - то просто признак и выходим
-	if pgs.mode != MetricaStorageModeSync {
+	if pgs.mode != config.MetricaStorageModeSync {
 
 		err := pgs.MemStorage.UpdateMetricaBatch(mtrks)
 		if err != nil {
@@ -238,8 +240,8 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 }
 
 // Получение всех сохраненных, с сортировкой по имени
-func (pgs *PGStorage) AllMetrics() []model.Metrica {
-	return pgs.MemStorage.AllMetrics()
+func (pgs *PGStorage) GetAllMetrics() []model.Metrica {
+	return pgs.MemStorage.GetAllMetrics()
 }
 
 // Показываем текущее состояние в output
@@ -264,7 +266,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 				return err
 			}
 
-			mtrks := pgs.MemStorage.AllMetrics()
+			mtrks := pgs.MemStorage.GetAllMetrics()
 			for _, mtrk := range mtrks {
 				err := pgs.sqlUpdateMetricaTx(ctxTo, tx, mtrk, "current")
 				if err != nil {

@@ -7,7 +7,7 @@ import (
 )
 
 func FormatMetricaGauge(value float64) string {
-	return strings.TrimRight(fmt.Sprintf("%.3f", value), "0")
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.3f", value), "0"), ".")
 }
 
 type MetricaGauge struct {
@@ -45,7 +45,26 @@ func (m *MetricaGauge) SrcValue(env string) float64 {
 	return m.value
 }
 
-func (m *MetricaGauge) UpdateValue(mtrk Metrica) error {
+func (m *MetricaGauge) UpdateValueAtomic(mtrk Metrica) error {
+
+	if m.name != mtrk.Name() {
+		return fmt.Errorf("MetricaGauge.UpdateValueAtomic поптыка обновить метрику с несовпадающим наименованием ")
+	}
+
+	if v, ok := mtrk.(*MetricaGauge); ok {
+		m.value = v.value
+		return nil
+	} else {
+		return fmt.Errorf("MetricaCounter.UpdateValue type mismatch: want MetricaCounter got %v", mtrk)
+	}
+}
+
+func (m *MetricaGauge) UpdateValueStart(mtrk Metrica) error {
+
+	if m.name != mtrk.Name() {
+		return fmt.Errorf("MetricaGauge.UpdateValueAtomic поптыка обновить метрику с несовпадающим наименованием ")
+	}
+
 	if v, ok := mtrk.(*MetricaGauge); ok {
 
 		if m.newValue != nil {

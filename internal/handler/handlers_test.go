@@ -8,15 +8,30 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-chi/chi"
+	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/model"
-	"github.com/qesterrx/tplmetrics/internal/repository"
+	"github.com/qesterrx/tplmetrics/internal/service"
 	"github.com/stretchr/testify/assert"
 )
 
+// Это надо будет заменить на mock или придумать что то более красивое
+func GetRouterForTest() (*service.TCLService, chi.Router) {
+
+	cfg := config.ConfigServer{
+		RestoreFromFileStorage: false,
+		StorageMode:            config.MetricaStorageModeSync,
+	}
+	tcl, _ := service.NewTCLService(&cfg)
+	hc := NewHandlerContainer(tcl, "")
+
+	return tcl, hc.GetRouter()
+
+}
+
 func TestGetAllCurrentMetricsHandler(t *testing.T) {
 
-	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	_, router := GetRouterForTest()
 
 	tests := []struct {
 		name       string
@@ -52,14 +67,13 @@ func TestGetAllCurrentMetricsHandler(t *testing.T) {
 
 func TestGetMetricaHandler(t *testing.T) {
 
-	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	tcl, router := GetRouterForTest()
 
-	storage.UpdateMetrica(model.NewMetricaCounter("c1", 5))
-	storage.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
+	tcl.UpdateMetrica(model.NewMetricaCounter("c1", 5))
+	tcl.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
 
-	valC, _ := storage.Metrica("c1", string(model.Counter))
-	valG, _ := storage.Metrica("g1", string(model.Gauge))
+	valC, _ := tcl.GetMetrica("c1", string(model.Counter))
+	valG, _ := tcl.GetMetrica("g1", string(model.Gauge))
 
 	tests := []struct {
 		name       string
@@ -130,8 +144,7 @@ func TestGetMetricaHandler(t *testing.T) {
 
 func TestUpdateMetricaHandler(t *testing.T) {
 
-	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	_, router := GetRouterForTest()
 
 	tests := []struct {
 		name        string
@@ -185,8 +198,7 @@ func TestUpdateMetricaHandler(t *testing.T) {
 
 func TestUpdateMetricaJSONHandler(t *testing.T) {
 
-	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
+	_, router := GetRouterForTest()
 
 	tests := []struct {
 		name        string
@@ -247,11 +259,11 @@ func TestUpdateMetricaJSONHandler(t *testing.T) {
 }
 
 func TestGetMetricaJSONHandler(t *testing.T) {
-	storage := repository.NewMemStorage()
-	router := GetRouter(storage)
 
-	storage.UpdateMetrica(model.NewMetricaCounter("c1", 5))
-	storage.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
+	tcl, router := GetRouterForTest()
+
+	tcl.UpdateMetrica(model.NewMetricaCounter("c1", 5))
+	tcl.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
 
 	reqCounter := `{"id":"c1","type":"counter"}`
 	reqGauge := `{"id":"g1","type":"gauge"}`

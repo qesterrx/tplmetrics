@@ -3,6 +3,7 @@ package repository
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
@@ -13,6 +14,7 @@ import (
 type MemStorage struct {
 	storage map[string]model.Metrica
 	keys    []string
+	mtx     sync.Mutex
 }
 
 // Фабрика
@@ -27,7 +29,7 @@ func NewMemStorage() *MemStorage {
 }
 
 // Получение метрики по имени
-func (ms *MemStorage) Metrica(name string, kind string) (model.Metrica, error) {
+func (ms *MemStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
 
 	//Так уж и быть поддержим одинаковые имена метрик разного типа
 	key := kind + "_" + name
@@ -46,14 +48,15 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	key := string(mtrk.Kind()) + "_" + mtrk.Name()
 
+	ms.mtx.Lock()
+	defer ms.mtx.Unlock()
+
 	mtrkSaved, ok := ms.storage[key]
 	if ok {
-		err := mtrkSaved.UpdateValue(mtrk)
+		err := mtrkSaved.UpdateValueAtomic(mtrk)
 		if err != nil {
-			mtrkSaved.Restore()
 			return err
 		}
-		mtrkSaved.Confirm()
 	} else {
 		ms.storage[key] = mtrk
 		ms.keys = append(ms.keys, key)
@@ -66,6 +69,9 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 // Обновление массива метрик - а вот тут "массовая" операция, если наткнулись на ошибку - надо все откатить
 func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
+	ms.mtx.Lock()
+	defer ms.mtx.Unlock()
+
 	touched, err := ms.startUpdateMetricaBatch(mtrks)
 	if err != nil {
 		ms.restoreUpdateMetricaBatch(touched)
@@ -77,7 +83,7 @@ func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 }
 
 // Получение всех сохраненных, с сортировкой по имени
-func (ms *MemStorage) AllMetrics() []model.Metrica {
+func (ms *MemStorage) GetAllMetrics() []model.Metrica {
 
 	sort.Strings(ms.keys)
 
@@ -132,7 +138,7 @@ func (ms *MemStorage) startUpdateMetricaBatch(mtrks []model.Metrica) (*[]*model.
 
 		mtrkSaved, ok := ms.storage[key]
 		if ok {
-			err := mtrkSaved.UpdateValue(mtrk)
+			err := mtrkSaved.UpdateValueStart(mtrk)
 			if err != nil {
 				return &touched, err
 			}

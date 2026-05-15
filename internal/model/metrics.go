@@ -10,7 +10,8 @@ type Metrica interface {
 	Name() string
 	Value() string
 	Kind() KindValue
-	UpdateValue(Metrica) error
+	UpdateValueAtomic(Metrica) error
+	UpdateValueStart(Metrica) error
 	Restore()
 	Confirm()
 }
