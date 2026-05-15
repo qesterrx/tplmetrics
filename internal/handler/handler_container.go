@@ -18,6 +18,7 @@ func NewHandlerContainer(tcl *service.TCLService, secretKeyForSign string) *Hand
 func (hc *HandlerContainer) GetRouter() chi.Router {
 	r := chi.NewRouter()
 
+	r.Use(middleware.IPContext)
 	r.Use(middleware.LoggingMiddleware)
 	if hc.secretKeyForSign != "" {
 		r.Use(middleware.HMACSignMiddleware(hc.secretKeyForSign)) //Это важно! подпись вычислялась после сжатия, значит проверять ее надо ДО распаковки

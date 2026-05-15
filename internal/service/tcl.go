@@ -3,12 +3,14 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
+	"github.com/qesterrx/tplmetrics/internal/middleware"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
@@ -31,10 +33,15 @@ type MetricaStorage interface {
 	Debug()
 }
 
+type UpdateMetricaSubscriber interface {
+	PushNotify(msg []byte)
+}
+
 // Структура под логику
 type TCLService struct {
 	config  *config.ConfigServer
 	storage MetricaStorage
+	subs    []UpdateMetricaSubscriber
 }
 
 // Конструктор
@@ -100,32 +107,90 @@ func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 
 	storage.Debug()
 
-	return &TCLService{config: config, storage: storage}, nil
+	/*Раз уж мы передали всю конфигурацию сюда, то и подписчиков создадим тут*/
+	subs := []UpdateMetricaSubscriber{}
+	if config.AuditFile != "" {
+		subs = append(subs, &UpdateMetricaSubscriberFile{FileName: config.AuditFile})
+	}
+	if config.AuditURL != "" {
+		subs = append(subs, &UpdateMetricaSubscriberClient{URL: config.AuditURL})
+	}
+
+	return &TCLService{config: config, storage: storage, subs: subs}, nil
 }
 
 // Проверка хранилища
-func (tcl *TCLService) Check() error {
+func (tcl *TCLService) Check(ctx context.Context) error {
 	return tcl.storage.Check()
 }
 
 // Метод для обновления данных метрики
-func (tcl *TCLService) UpdateMetrica(mtrk model.Metrica) error {
-	return tcl.storage.UpdateMetrica(mtrk)
+func (tcl *TCLService) UpdateMetrica(ctx context.Context, mtrk model.Metrica) error {
+	res := tcl.storage.UpdateMetrica(mtrk)
+	mtrks := []model.Metrica{}
+	mtrks = append(mtrks, mtrk)
+
+	tcl.NotifyUpdateMetrica(ctx, mtrks)
+	return res
 }
 
 // Метод для обновления данных метрик
-func (tcl *TCLService) UpdateMetricaBatch(mtrks []model.Metrica) error {
-	return tcl.storage.UpdateMetricaBatch(mtrks)
+func (tcl *TCLService) UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error {
+	res := tcl.storage.UpdateMetricaBatch(mtrks)
+	tcl.NotifyUpdateMetrica(ctx, mtrks)
+	return res
 }
 
 // Метод получения экземпляра метрики по имени
-func (tcl *TCLService) GetMetrica(name string, kind string) (model.Metrica, error) {
+func (tcl *TCLService) GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error) {
 	return tcl.storage.GetMetrica(name, kind)
 }
 
 // Получение всех метрик
-func (tcl *TCLService) GetAllMetrics() []model.Metrica {
+func (tcl *TCLService) GetAllMetrics(ctx context.Context) []model.Metrica {
 	return tcl.storage.GetAllMetrics()
+}
+
+// Добавляем подписчика
+func (tcl *TCLService) AddUpdateMetricaSubscriber(sub UpdateMetricaSubscriber) {
+	//TODO тут нет проверки на то что такой подписчки уже есть в массиве
+	if sub != nil {
+		tcl.subs = append(tcl.subs, sub)
+	}
+}
+
+// Оповещаем подписчиков о обновлении метрик
+func (tcl *TCLService) NotifyUpdateMetrica(ctx context.Context, mtrks []model.Metrica) {
+
+	if len(tcl.subs) == 0 || len(mtrks) == 0 {
+		return
+	}
+
+	ip_key := ctx.Value(middleware.ContextIP)
+	ip := ""
+
+	if ip_key != nil {
+		tmp, ok := ip_key.(string)
+		if ok {
+			ip = tmp
+		}
+	}
+
+	mNames := []string{}
+	for k := range mtrks {
+		mNames = append(mNames, mtrks[k].Name())
+	}
+
+	msg := model.UpdateMetricaSubscriberMsg{Ts: time.Now().Unix(), Metrics: mNames, IP: ip}
+	json, err := json.MarshalIndent(msg, "", " ")
+	if err != nil {
+		logger.Log.Error().Msg("NotifyUpdateMetrica: Ошибка сериализации UpdateMetricaSubscriberMsg")
+	}
+
+	for _, sub := range tcl.subs {
+		sub.PushNotify(json)
+	}
+
 }
 
 // Переодическая запись текущего состояния в хранилище

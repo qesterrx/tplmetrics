@@ -32,3 +32,9 @@ func (na *NetAddress) Set(value string) error {
 
 	return nil
 }
+
+func (na *NetAddress) UnmarshalFlag(value string) error {
+
+	return na.Set(value)
+
+}

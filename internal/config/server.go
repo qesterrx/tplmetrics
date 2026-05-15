@@ -1,11 +1,12 @@
 package config
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"regexp"
 	"strconv"
+
+	"github.com/jessevdk/go-flags"
 )
 
 type MetricaStorageMode string
@@ -16,29 +17,29 @@ const (
 )
 
 type ConfigServer struct {
-	ServerHost             NetAddress
-	StoreInterval          int
-	FileStorageName        string
-	RestoreFromFileStorage bool
-	DatabaseDSN            string
-	SecretKeyForSign       string
+	ServerHost             NetAddress `short:"a" long:"address" description:"Endpoint for server. Format host:port" default:"localhost:8080"`
+	StoreInterval          int        `short:"i" long:"store-interval" description:"StoreInterval - time in sec after which data would be save in file" default:"300"`
+	FileStorageName        string     `short:"f" long:"file-storage" description:"filename for storing data" default:"TempFileStorage"`
+	RestoreFromFileStorage bool       `short:"r" long:"restore" description:"Load data from file on start"`
+	DatabaseDSN            string     `short:"d" long:"database-dsn" description:"Connection string for postgresql"`
+	SecretKeyForSign       string     `short:"k" long:"secret-key" description:"SecretKeyForSign - key for sign data in header HashSHA256"`
+	AuditFile              string     `long:"audit-file" description:"AuditFile - Filename Subscriber on Update metrica event saving data to file" default:""`
+	AuditURL               string     `long:"audit-url" description:"AuditURL - URL Subscriber on Update metrica event sending data to URL" default:""`
 	StorageMode            MetricaStorageMode
 }
 
 func ParseParamsServer() (*ConfigServer, error) {
 
-	fs := flag.NewFlagSet("", flag.PanicOnError)
-
 	var cfg ConfigServer
-	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
-	fs.Var(&cfg.ServerHost, "a", "Endpoint for server. Format host:port")
-	fs.IntVar(&cfg.StoreInterval, "i", 300, "StoreInterval - time in sec after which data would be save in file")
-	fs.StringVar(&cfg.FileStorageName, "f", "TempFileStorage", "filename for soraging data")
-	fs.BoolVar(&cfg.RestoreFromFileStorage, "r", false, "Load data from file on start")
-	fs.StringVar(&cfg.DatabaseDSN, "d", "", "Connection string for postgresql")
-	fs.StringVar(&cfg.SecretKeyForSign, "k", "", "SecretKeyForSign - key for sign data in header HashSHA256")
 
-	fs.Parse(os.Args[1:])
+	// Создаем парсер (аналог FlagSet)
+	parser := flags.NewParser(&cfg, flags.Default)
+
+	// Парсим аргументы
+	_, err := parser.ParseArgs(os.Args[1:])
+	if err != nil {
+		return nil, err
+	}
 
 	//Переопределим параметрами из ENV
 	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {
@@ -78,6 +79,14 @@ func ParseParamsServer() (*ConfigServer, error) {
 
 	if envKey := os.Getenv("KEY"); envKey != "" {
 		cfg.SecretKeyForSign = envKey
+	}
+
+	if envAuditFile := os.Getenv("AUDIT_FILE"); envAuditFile != "" {
+		cfg.AuditFile = envAuditFile
+	}
+
+	if envAuditURL := os.Getenv("AUDIT_URL"); envAuditURL != "" {
+		cfg.AuditURL = envAuditURL
 	}
 
 	//Дополнительные проверки параметров
