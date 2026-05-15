@@ -166,11 +166,11 @@ func (tcl *TCLService) NotifyUpdateMetrica(ctx context.Context, mtrks []model.Me
 		return
 	}
 
-	ip_key := ctx.Value(middleware.ContextIP)
+	ipInCtx := ctx.Value(middleware.ContextIP)
 	ip := ""
 
-	if ip_key != nil {
-		tmp, ok := ip_key.(string)
+	if ipInCtx != nil {
+		tmp, ok := ipInCtx.(string)
 		if ok {
 			ip = tmp
 		}
@@ -181,7 +181,7 @@ func (tcl *TCLService) NotifyUpdateMetrica(ctx context.Context, mtrks []model.Me
 		mNames = append(mNames, mtrks[k].Name())
 	}
 
-	msg := model.UpdateMetricaSubscriberMsg{Ts: time.Now().Unix(), Metrics: mNames, IP: ip}
+	msg := model.UpdateMetricaSubscriberMsg{TS: time.Now().Unix(), Metrics: mNames, IP: ip}
 	json, err := json.MarshalIndent(msg, "", " ")
 	if err != nil {
 		logger.Log.Error().Msg("NotifyUpdateMetrica: Ошибка сериализации UpdateMetricaSubscriberMsg")

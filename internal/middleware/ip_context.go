@@ -5,7 +5,9 @@ import (
 	"net/http"
 )
 
-const ContextIP string = "ContextIP"
+type ContextValue string
+
+const ContextIP ContextValue = "ContextIP"
 
 // Простейший вариант, если надо, можно усложнить анализом X-FORWARDED-FROM
 func IPContext(h http.Handler) http.Handler {
