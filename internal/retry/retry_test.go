@@ -1,7 +1,9 @@
 package retry
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -63,5 +65,21 @@ func TestRetry(t *testing.T) {
 	assert.WithinDuration(t, start, time.Now(), 10*time.Millisecond) //даем 10 мс на выполнение fn
 	assert.NoError(t, err)
 	assert.Equal(t, 1, cnt, "Количество вызовов retry не соответсвует ожидаемомоу")
+
+}
+
+func ExampleRetryFunc() {
+
+	//Чекеры ошибок
+	chTrue := func(error) bool { return true }
+
+	//Функция fn возвращающая ошибку
+	fn := func() error {
+		fmt.Println("run fn", time.Now())
+		return errors.New("test error")
+	}
+
+	//В данном случае функция fn будет выполняться 3 раза, первый раз сразу, второ раз через 10ms и еще один раз через 20ms
+	RetryFunc(context.Background(), fn, chTrue, 3, 10*time.Millisecond, 20*time.Millisecond)
 
 }

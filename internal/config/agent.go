@@ -1,3 +1,4 @@
+// Пакет config содержит в себе описание объектов и функция для конфигурации приложения (клиента или сервера)
 package config
 
 import (
@@ -7,24 +8,26 @@ import (
 	"strconv"
 )
 
-const ClientErrorCount = 1000
-
+// ConfigAgent структура для хранения конфигурации клиента, содержит следующие поля
+// ServerHost Адрес клиента, задается параметром "a" или переменной окружения ADDRESS
+// PoolInterval Интервал опроса метрик, задается параметром "p" или переменной окружения POLL_INTERVAL
+// ReportInterval Интервал отправки метрик на сервер, задается параметром "r" или переменной окружения REPORT_INTERVAL
+// RateLimit - Количество горутин, отправляющий данные на сервер, задается параметром "l" или переменной окружения RATE_LIMIT
+// SecretKeyForSign Ключ для HMAC шифрования сообщения перед отправкой, задается параметром "k" или переменной окружения KEY
 type ConfigAgent struct {
 	ServerHost       NetAddress
 	PoolInterval     int
 	ReportInterval   int
-	ClientErrorCount int
 	RateLimit        int
 	SecretKeyForSign string
 }
 
+// ParseParamsAgent - Процедура создания структуры ConfigAgent на основе параметров командной строки и переменных окружения
 func ParseParamsAgent() (*ConfigAgent, error) {
 
 	fs := flag.NewFlagSet("", flag.PanicOnError)
 
 	var cfg ConfigAgent
-
-	cfg.ClientErrorCount = ClientErrorCount
 
 	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
 	fs.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")

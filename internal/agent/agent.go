@@ -1,3 +1,4 @@
+// Пакет agent содержит в себе основные функции для работы клиента по сбору метрик
 package agent
 
 import (
@@ -26,8 +27,7 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-// Если честно - не понятно какие ошибки переотправлять а какие нет. Если это важно почему этому не научили или хотя бы не тыкнули носом во что-то полезное.
-// Не магия конечно но так... пальцем в небо
+// retryableErrors - Список ошибок для переотправки, проверяемый через checkRetryRequest функцию
 var retryableErrors = []error{
 	syscall.ECONNREFUSED, //Соединение отклонено
 	syscall.ECONNRESET,   //Соединение сброшено
@@ -39,7 +39,7 @@ var retryableErrors = []error{
 	syscall.EWOULDBLOCK,  //Ресурс временно недоступен
 }
 
-// Функция проверки ошибки на необходимость повтора
+// checkRetryRequest- Функция проверки ошибки на необходимость повтора
 func checkRetryRequest(err error) bool {
 
 	for _, v := range retryableErrors {
@@ -51,7 +51,7 @@ func checkRetryRequest(err error) bool {
 	return false
 }
 
-/*Процедура собирает метрики через интервал pollInterval, записывает в очередь queue*/
+// Collector Процедура(горутина) собирает основные метрики через переданный интервал pollInterval, записывает в очередь toGroup
 func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval int) {
 
 	logger.Log.Debug().Msg("Запуск Collector")
@@ -110,7 +110,7 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 
 }
 
-/*Мда...*/
+// CollectorAdd Процедура(горутина) - собирает дополнительные метрики через pollInterval, отправляет в очередь toGroup
 func CollectorAdd(ctx context.Context, toGroup chan<- model.Metrica, pollInterval int) {
 
 	logger.Log.Debug().Msg("Запуск CollectorAdd")
@@ -146,7 +146,7 @@ func CollectorAdd(ctx context.Context, toGroup chan<- model.Metrica, pollInterva
 
 }
 
-/*Процедура через reportInterval вычитывает очередь toGroup, группирует gauge метрики и ставит в очередь на отправку toSend в виде []byte*/
+// Reporter Процедура (горутина) - через reportInterval вычитывает очередь toGroup, Gauge метрики группирует, Counter метрики оставляет последнюю из очереди. Далее ставит сгруппированные/отфильтрованные значения в очередь на отправку toSend в виде []byte
 func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- []byte, reportInterval int) {
 	logger.Log.Debug().Msg("Запуск Reporter")
 
@@ -224,6 +224,12 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- [
 
 }
 
+// Sender - Процедура (горутина) которая вычитывает данные из очереди toSend и отправляет их по url
+// В метод дополнительно передан параметр secretKeyForSign, содаржащий ключ для шифрования сообщения через функцию HMACSignMiddleware
+//
+// В данной процедуре используется resty клиент, и дополнительно заданы middleware функции
+// GzipCompressMiddleware
+// HMACSignMiddleware
 func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string) {
 	logger.Log.Debug().Msg("Запуск Sender")
 
@@ -255,7 +261,7 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 
 }
 
-/*Процедура отвечает только за отправку уже сериализованных данных*/
+// Send - Процедура отвечает за отправку сериализованных данных
 func Send(ctx context.Context, client *resty.Client, url string, body []byte) error {
 
 	//замыкание для вызова в retry.RetryFunc
@@ -284,6 +290,7 @@ func Send(ctx context.Context, client *resty.Client, url string, body []byte) er
 
 }
 
+// GzipCompressMiddleware - Middleware процедура обеспечивающая архивацию тела http запроса перед отправкой на сервер
 func GzipCompressMiddleware(c *resty.Client, r *resty.Request) error {
 	if r.Body != nil {
 
@@ -321,6 +328,7 @@ func GzipCompressMiddleware(c *resty.Client, r *resty.Request) error {
 
 }
 
+// HMACSignMiddleware - Middleware процедура шифрующая тело http запроса HMAC алгоритмом с переданным в виде параметра ключем
 func HMACSignMiddleware(key string) resty.RequestMiddleware {
 
 	secret := []byte(key)
@@ -354,5 +362,3 @@ func HMACSignMiddleware(key string) resty.RequestMiddleware {
 	}
 
 }
-
-/*Вообще конечно бросается в глаза то что можно было обойтись одной middleware или вообще без них...*/

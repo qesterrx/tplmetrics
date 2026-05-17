@@ -14,8 +14,9 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/retry"
 )
 
-/*Реализация интерфейса MetricaStorage для хранения данных в БД PostgreSQL*/
-
+// PGStorage - структура, реализующая интерфейс [service.MetricaStorage]
+// обеспечивает сохранение метрик в БД
+// поддерживает асинхронный режим работы
 type PGStorage struct {
 	*MemStorage
 	mode       config.MetricaStorageMode
@@ -23,7 +24,7 @@ type PGStorage struct {
 	db         *sql.DB
 }
 
-// Функция проверяет ошибку на возможность retry
+// checkRetryPg - функци проверки ошибки на необходимость переотправки запроса в БД
 func checkRetryPg(err error) bool {
 
 	//По идее тут тоже могут быть ошибки сетевого взаимодействия, если БД вдруг упала скорее всего будет так же connect: connection refused
@@ -41,7 +42,12 @@ func checkRetryPg(err error) bool {
 
 }
 
-// Фабрика
+// NewPGStorage - функция возвращает новый экземпляр PGStorage
+// На вход ожидает
+// ms - адрес экземпляра MemStorage (для хранения изменений в памяти)
+// db - ссылка на подключение к БД
+// mode - режим работы хранилища MetricaStorageMode
+// * Всегда восстанавливает данные из БД в память перед началом работы
 func NewPGStorage(ms *MemStorage, db *sql.DB, mode config.MetricaStorageMode) (*PGStorage, error) {
 
 	logger.Log.Debug().Msg("Создание PGStorage")
@@ -104,14 +110,14 @@ func NewPGStorage(ms *MemStorage, db *sql.DB, mode config.MetricaStorageMode) (*
 	return &pgs, nil
 }
 
-// Получение метрики по имени
+// GetMetrica - возвращает метрику по имени и типу
 func (pgs *PGStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
 	//т.к. в памяти у нас кеш то тут напрямую к БД не обращаемся
 	//главное чтобы экзепляр приложения был один и никто другой метрики не менял в БД/ФАЙЛЕ
 	return pgs.MemStorage.GetMetrica(name, kind)
 }
 
-// Обновление метрики
+// UpdateMetrica - обновляет метрику
 func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	//Если асинхрон - то просто признак и выходим
@@ -172,7 +178,7 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 }
 
-// Обновление массива метрик
+// UpdateMetricaBatch Обновляет массив метрик
 func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
 	if len(mtrks) == 0 {
@@ -239,17 +245,18 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
 }
 
-// Получение всех сохраненных, с сортировкой по имени
+// AllMetrics - Получение всех сохраненных метрик с сортировкой по имени
 func (pgs *PGStorage) GetAllMetrics() []model.Metrica {
 	return pgs.MemStorage.GetAllMetrics()
 }
 
-// Показываем текущее состояние в output
+// Debug - Показываем текущее состояние в output
 func (pgs *PGStorage) Debug() {
 	pgs.MemStorage.Debug()
 }
 
-// Сброc сданных из памяти в БД - ну извращение же, хотя для метрик может быть и норм
+// WriteMetrics - Метод для записи данных в хранилище
+// Обновление файла происходит только если есть хоть одна метрика которая была изменена после последнего сохранения
 func (pgs *PGStorage) WriteMetrics() error {
 
 	if pgs.hasChanged {
@@ -288,14 +295,14 @@ func (pgs *PGStorage) WriteMetrics() error {
 	return nil
 }
 
-// Пинг для 10 инкремента
+// Check - Проверка хранилища
 func (pgs *PGStorage) Check() error {
 	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancelCtxTo()
 	return pgs.db.PingContext(ctxTo)
 }
 
-// функция для обновления метрики
+// sqlUpdateMetricaTx - дополнительная функция для изменения массива метрик в рамках одной транзакции БД
 func (pgs *PGStorage) sqlUpdateMetricaTx(ctx context.Context, tx *sql.Tx, mtrk model.Metrica, env string) error {
 
 	if tx == nil {

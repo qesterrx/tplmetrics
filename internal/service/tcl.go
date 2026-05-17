@@ -1,3 +1,4 @@
+// Пакет service предназначен для описания основной логики приложения
 package service
 
 import (
@@ -15,36 +16,51 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
 
-// Интерфейс хранилки
+// MetricaStorage - Интерфейс описывающий методы для работы с долговременным хранилищем данных
 type MetricaStorage interface {
-	//Метод для обновления данных метрики
+
+	//UpdateMetrica - Метод для обновления данных метрики
 	UpdateMetrica(model.Metrica) error
-	//Обновление массива метрик
+
+	//UpdateMetricaBatch - Обновление массива метрик
 	UpdateMetricaBatch([]model.Metrica) error
-	//Метод получения экземпляра метрики по имени
+
+	//GetMetrica - Метод получения экземпляра метрики по имени
 	GetMetrica(name string, kind string) (model.Metrica, error)
-	//Получение всех метрик
+
+	//GetAllMetrics - Получение всех метрик
 	GetAllMetrics() []model.Metrica
-	//Метод для "сброса" накопившихся записей в долговременное хранилище
+
+	//WriteMetrics - Метод для "сброса" накопившихся записей в долговременное хранилище
 	WriteMetrics() error
-	//Проверка хранилища
+
+	//Check - Проверка хранилища
 	Check() error
-	//Отладочный вызов
+
+	//Debug - Отладочный вызов
 	Debug()
 }
 
+// UpdateMetricaSubscriber - интерфейс подписчика аудита
 type UpdateMetricaSubscriber interface {
 	PushNotify(msg []byte)
 }
 
-// Структура под логику
+// TCLService - Структура объекта содержащего сервисный слой обработчиков
 type TCLService struct {
 	config  *config.ConfigServer
 	storage MetricaStorage
 	subs    []UpdateMetricaSubscriber
 }
 
-// Конструктор
+// NewTCLService - Функция возвращает новый экземпляр TCLService.
+// На вход передается ссылка на конфигурацию сервера
+// Внутри метода происходит выбор постоянного хранилища данных на основе переданных параметров по следующей логике
+// Если передан DatabaseDSN то исползуется postgres
+// Иначе, если передан FileStorageName то используется файл
+// Иначе данные хранятся только в ОЗУ
+//
+// Так же на основе параметров AuditFile/AuditURL определяются подписчики на аудит изменения метрик
 func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 
 	var storage MetricaStorage
@@ -119,39 +135,44 @@ func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 	return &TCLService{config: config, storage: storage, subs: subs}, nil
 }
 
-// Проверка хранилища
+// Check - метод проверки готовности хранилища
 func (tcl *TCLService) Check(ctx context.Context) error {
 	return tcl.storage.Check()
 }
 
-// Метод для обновления данных метрики
+// UpdateMetrica - метод обновления значения метрики
 func (tcl *TCLService) UpdateMetrica(ctx context.Context, mtrk model.Metrica) error {
 	res := tcl.storage.UpdateMetrica(mtrk)
+
+	//Аудит
 	mtrks := []model.Metrica{}
 	mtrks = append(mtrks, mtrk)
+	tcl.notifyUpdateMetrica(ctx, mtrks)
 
-	tcl.NotifyUpdateMetrica(ctx, mtrks)
 	return res
 }
 
-// Метод для обновления данных метрик
+// UpdateMetricaBatch - метод для пакетного обновления метрик
 func (tcl *TCLService) UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error {
 	res := tcl.storage.UpdateMetricaBatch(mtrks)
-	tcl.NotifyUpdateMetrica(ctx, mtrks)
+
+	//Аудит
+	tcl.notifyUpdateMetrica(ctx, mtrks)
+
 	return res
 }
 
-// Метод получения экземпляра метрики по имени
+// GetMetrica - метод получения экземпляра метрики по имени
 func (tcl *TCLService) GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error) {
 	return tcl.storage.GetMetrica(name, kind)
 }
 
-// Получение всех метрик
+// GetAllMetrics - метод получения всех метрик
 func (tcl *TCLService) GetAllMetrics(ctx context.Context) []model.Metrica {
 	return tcl.storage.GetAllMetrics()
 }
 
-// Добавляем подписчика
+// AddUpdateMetricaSubscriber - Добавляет подписчика аудита для уведомления об обновлении метрик
 func (tcl *TCLService) AddUpdateMetricaSubscriber(sub UpdateMetricaSubscriber) {
 	//TODO тут нет проверки на то что такой подписчки уже есть в массиве
 	if sub != nil {
@@ -159,8 +180,8 @@ func (tcl *TCLService) AddUpdateMetricaSubscriber(sub UpdateMetricaSubscriber) {
 	}
 }
 
-// Оповещаем подписчиков о обновлении метрик
-func (tcl *TCLService) NotifyUpdateMetrica(ctx context.Context, mtrks []model.Metrica) {
+// notifyUpdateMetrica - Функция для оповещения подпичиков об изменении метрик
+func (tcl *TCLService) notifyUpdateMetrica(ctx context.Context, mtrks []model.Metrica) {
 
 	if len(tcl.subs) == 0 || len(mtrks) == 0 {
 		return
@@ -193,7 +214,7 @@ func (tcl *TCLService) NotifyUpdateMetrica(ctx context.Context, mtrks []model.Me
 
 }
 
-// Переодическая запись текущего состояния в хранилище
+// TickerWriteMetrics - Переодическая запись текущего состояния в хранилище, в случае асинхронного режима работы сервиса
 func (tcl *TCLService) TickerWriteMetrics(ctx context.Context) {
 
 	ticker := time.NewTicker(time.Second * time.Duration(tcl.config.StoreInterval))

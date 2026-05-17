@@ -5,18 +5,33 @@ import (
 	"strconv"
 )
 
-// Интерфейс метрики исползуемый в сторадже и хендлерах
+// Metrica - Основной интерфейс используемый в приложении для обмена между структурам
 type Metrica interface {
+
+	//Name - возвращает Имя метрики
 	Name() string
+
+	//Value - Возвращает значение метрики, приведенное к String
 	Value() string
+
+	//Kind - Возвращает тип метрики в виде KindValue
 	Kind() KindValue
+
+	//UpdateValueAtomic - обновление метрики в виде атомарной операции
 	UpdateValueAtomic(Metrica) error
+
+	//UpdateValueStart - обновление метрики в виде транзакционной операции, ожидающей подтверждения (Confirm) или отката (Restore)
 	UpdateValueStart(Metrica) error
+
+	//Restore - откат изменения при транзакционной операции
 	Restore()
+
+	//Confirm - подтверждение изменения при транзакционной операции
 	Confirm()
 }
 
-// Фабрика метрик
+// NewMetrica - Фабрика метрик.
+// На основе имени, типа и значения создает экземляр метрики указанного типа
 func NewMetrica(name string, kind string, value string) (Metrica, error) {
 
 	kindValue, err := GetKindValue(kind)

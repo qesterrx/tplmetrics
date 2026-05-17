@@ -13,6 +13,13 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
+// PingDBHandler - Handler по адресу /ping проверяющий готовность работы сервисного слоя
+// Метод Get
+// Обязательные заголовки
+// - нет
+// Ошибки
+// 400 если метод не GET
+// 500 если проверка сервисного слоя не прошла
 func (hc *HandlerContainer) PingDBHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("PingDBHandler клиент обратился с ошибочным методом в запросе")
@@ -32,6 +39,15 @@ func (hc *HandlerContainer) PingDBHandler(w http.ResponseWriter, r *http.Request
 
 }
 
+// GetAllCurrentMetricsHandler - Handler по адресу / возвращающий все сохраненные сервером метрики
+// * возвращает даже те метрики которые не были записаны в постоянное хранилище
+// Метод Get
+// Обязательные заголовки
+// - нет
+// Результат
+// "Content-Type", "text/html"
+// Ошибки
+// 400 если метод не GET
 func (hc *HandlerContainer) GetAllCurrentMetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
@@ -70,7 +86,15 @@ func (hc *HandlerContainer) GetAllCurrentMetricsHandler(w http.ResponseWriter, r
 	t.Execute(w, data)
 }
 
-// Получение метрики по URI
+// GetMetricaHandler - Handler по адресу /value/{kind}/{name} возвращающий значение одной метрики заданной именем и типом
+// Метод Get
+// Обязательные заголовки
+// - нет
+// Результат
+// "Content-Type", "text/html"
+// Ошибки
+// 404 если метрика не найдена
+// 400 если метод не GET
 func (hc *HandlerContainer) GetMetricaHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
@@ -95,7 +119,15 @@ func (hc *HandlerContainer) GetMetricaHandler(w http.ResponseWriter, r *http.Req
 
 }
 
-// Обновление значения метрики через URI
+// UpdateMetricaHandlerу - Handler по адресу /update/{kind}/{name}/{value} обновление значения одной метрики заданной именем, типом и значением
+// Метод Post
+// Обязательные заголовки
+// - нет
+// Результат
+// "Content-Type", "text/html"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) UpdateMetricaHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -128,7 +160,15 @@ func (hc *HandlerContainer) UpdateMetricaHandler(w http.ResponseWriter, r *http.
 
 }
 
-// Обновление значения метрики через json
+// UpdateMetricaJSONHandler - Handler по адресу /update/ обновление значения одной метрики по JSON представлению
+// Метод Post
+// Обязательные заголовки
+// "Content-Type", "application/json"
+// Результат
+// "Content-Type", "application/json"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -174,7 +214,15 @@ func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *h
 
 }
 
-// Получение значения метрики через json
+// GetMetricaJSONHandler - Handler по адресу /value/ получения данных о сохраненных метриках в виде JSON
+// Метод Post
+// Обязательные заголовки
+// "Content-Type", "application/json"
+// Результат
+// "Content-Type", "application/json"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) GetMetricaJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -221,12 +269,20 @@ func (hc *HandlerContainer) GetMetricaJSONHandler(w http.ResponseWriter, r *http
 
 }
 
-// Обновление метрик массивом
+// UpdateMetricsJSONHandler - Handler по адресу /updates/ обновление массива метрик заданных в виде JSON
+// Метод Post
+// Обязательные заголовки
+// "Content-Type", "application/json"
+// Результат
+// "Content-Type", "application/json"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) UpdateMetricsJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		logger.Log.Info().Msg("UpdateMetricsJSONHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 

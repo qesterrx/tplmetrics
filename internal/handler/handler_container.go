@@ -1,3 +1,4 @@
+// Пакет handler содержит в себе методы для маршрутизации и обработки HTTP запросов сервером.
 package handler
 
 import (
@@ -6,15 +7,24 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/service"
 )
 
+// HandlerContainer - структура введения зависимостей для хендлеров
+// Содержит сслыку на структуру слоя сервиса а так же дополнительные параметры, необходимые обработчикам
 type HandlerContainer struct {
 	tcl              *service.TCLService
 	secretKeyForSign string
 }
 
+// NewHandlerContainer - возвращает новый экземпляр HandlerContainer
 func NewHandlerContainer(tcl *service.TCLService, secretKeyForSign string) *HandlerContainer {
 	return &HandlerContainer{tcl: tcl, secretKeyForSign: secretKeyForSign}
 }
 
+// GetRouter Функция возвращающая роутер запросов который занимается маршрутизацией
+// Дополнительно в роутере прописаны исползуемые Middleware функции
+// IPContext - функция для добавления в контекст переменной ИП адреса клиента
+// LoggingMiddleware - логгирование запросов
+// HMACSignMiddleware - расшифровка HMAC сообщения от клиента
+// GzipCompressMiddleware - архивирование/разархивирование тела запроса
 func (hc *HandlerContainer) GetRouter() chi.Router {
 	r := chi.NewRouter()
 

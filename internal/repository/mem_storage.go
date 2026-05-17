@@ -9,15 +9,15 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
-/*Базовая реализация интерфейса MetricaStorage*/
-
+// MemStorage - Базовая реализация интерфейса MetricaStorage
+// MemStorage используется в других реализациях интерфейса MetricaStorage для реализации транзакицонности на уровне сервиса
 type MemStorage struct {
 	storage map[string]model.Metrica
 	keys    []string
 	mtx     sync.Mutex
 }
 
-// Фабрика
+// NewMemStorage - функция возвращает новый экземпляр MemStorage
 func NewMemStorage() *MemStorage {
 	logger.Log.Debug().Msg("Создание MemStorage")
 	mm := MemStorage{
@@ -28,7 +28,7 @@ func NewMemStorage() *MemStorage {
 	return &mm
 }
 
-// Получение метрики по имени
+// GetMetrica - возвращает метрику по имени и типу
 func (ms *MemStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
 
 	//Так уж и быть поддержим одинаковые имена метрик разного типа
@@ -43,7 +43,7 @@ func (ms *MemStorage) GetMetrica(name string, kind string) (model.Metrica, error
 
 }
 
-// Обновление метрики - атомарная операция, либо обновилась либо нет
+// UpdateMetrica - обновляет метрику
 func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 	key := string(mtrk.Kind()) + "_" + mtrk.Name()
@@ -66,7 +66,7 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 
 }
 
-// Обновление массива метрик - а вот тут "массовая" операция, если наткнулись на ошибку - надо все откатить
+// UpdateMetricaBatch Обновляет массив метрик
 func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 
 	ms.mtx.Lock()
@@ -82,7 +82,7 @@ func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	return nil
 }
 
-// Получение всех сохраненных, с сортировкой по имени
+// AllMetrics - Получение всех сохраненных метрик с сортировкой по имени
 func (ms *MemStorage) GetAllMetrics() []model.Metrica {
 
 	sort.Strings(ms.keys)
@@ -96,7 +96,7 @@ func (ms *MemStorage) GetAllMetrics() []model.Metrica {
 	return mm
 }
 
-// Показываем текущее состояние в output
+// Debug - Показываем текущее состояние в output
 func (ms *MemStorage) Debug() {
 
 	sort.Strings(ms.keys)
@@ -113,12 +113,12 @@ func (ms *MemStorage) Debug() {
 	}
 }
 
-// По факту это заглушка т.к. memStorage некуда скидывать данные
+// WriteMetrics - заглушка, при хранении в памяти писать некуда
 func (ms *MemStorage) WriteMetrics() error {
 	return nil
 }
 
-// Проверка хранилища, еще одна заглушка
+// Check - Проверка хранилища, заглушка, MemStorage всегда готов к работе
 func (ms *MemStorage) Check() error {
 	return nil
 }
@@ -127,7 +127,7 @@ func (ms *MemStorage) Check() error {
 // нужны операции с возможностью отката и фиксации
 // чет мне кажется что я упоролся.. но пока еще не понял до конца
 
-// Обновление массива метрик - а вот тут "массовая" операция, если наткнулись на ошибку - надо все откатить
+// startUpdateMetricaBatch - Обновление массива метрик - а вот тут "массовая" операция, если наткнулись на ошибку - надо все откатить
 func (ms *MemStorage) startUpdateMetricaBatch(mtrks []model.Metrica) (*[]*model.Metrica, error) {
 
 	touched := []*model.Metrica{}
@@ -156,6 +156,7 @@ func (ms *MemStorage) startUpdateMetricaBatch(mtrks []model.Metrica) (*[]*model.
 	return &touched, nil
 }
 
+// confirmUpdateMetricaBatch - Подтверждение массового изменения метрик
 func (ms *MemStorage) confirmUpdateMetricaBatch(mtrks *[]*model.Metrica) {
 
 	for _, mtrk := range *mtrks {
@@ -163,6 +164,7 @@ func (ms *MemStorage) confirmUpdateMetricaBatch(mtrks *[]*model.Metrica) {
 	}
 }
 
+// restoreUpdateMetricaBatch - Отмена массового изменения метрик
 func (ms *MemStorage) restoreUpdateMetricaBatch(mtrks *[]*model.Metrica) {
 
 	for _, mtrk := range *mtrks {

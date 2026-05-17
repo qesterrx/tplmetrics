@@ -5,13 +5,18 @@ import (
 	"strings"
 )
 
+// KindValue - Тип описывающий возможные варианты (типы) метрик
 type KindValue string
 
 const (
-	Gauge   KindValue = "gauge"
+	//Gauge - Метрика содержащая значение типа float64, перетирает значение при каждом обновлении
+	Gauge KindValue = "gauge"
+
+	//Counter - Метрика содержащая значение типа int64, инкрементирует значение при обнолвении
 	Counter KindValue = "counter"
 )
 
+// GetKindValue - функция преобразующая строку содержащую тип метрики в тип KindValue
 func GetKindValue(kind string) (KindValue, error) {
 	switch strings.ToLower(kind) {
 	case "gauge":

@@ -16,8 +16,9 @@ var gzipWriterPool = sync.Pool{
 	},
 }
 
-// в данном случае мы используем не встраивание а композицию, поэтому надо определить все методы интерфейса под который мы мимикрируем
+// GZIPCompressWriter - структура необходимая для переопределения поведения http.ResponseWriter
 type GZIPCompressWriter struct {
+	// в данном случае мы используем не встраивание а композицию, поэтому надо определить все методы интерфейса под который мы мимикрируем
 	w    http.ResponseWriter
 	zipw *gzip.Writer
 	pool *sync.Pool
@@ -54,8 +55,8 @@ func (cw *GZIPCompressWriter) WriteHeader(statusCode int) {
 
 // ---------------------------------------------------------------------compressReader
 
-// в данном случае мы используем не встраивание а композицию, поэтому надо определить все методы интерфейса под который мы мимикрируем
 type GZIPCompressReader struct {
+	// в данном случае мы используем не встраивание а композицию, поэтому надо определить все методы интерфейса под который мы мимикрируем
 	r  io.ReadCloser //этот интерфейс реализует *http.request.body
 	zr *gzip.Reader
 }
@@ -91,6 +92,9 @@ func (cr *GZIPCompressReader) Close() error {
 
 //---------------------------------------------------------------------Middleware
 
+// GzipCompressMiddleware - Middleware-фунция обеспечивающая архивацию/разархивацию тела http.
+// При разархивации описается на наличие заголовка в запросе клиента "Content-Encoding":"gzip"
+// При архивации опирается на наличие заголовка в запросе клиента "Accept-Encoding":"gzip"
 func GzipCompressMiddleware(h http.Handler) http.Handler {
 	funcCompress := func(w http.ResponseWriter, r *http.Request) {
 
