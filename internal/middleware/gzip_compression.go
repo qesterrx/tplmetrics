@@ -5,23 +5,35 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 )
 
-//---------------------------------------------------------------------compressWriter
+// ---------------------------------------------------------------------compressWriter
+var gzipWriterPool = sync.Pool{
+	New: func() interface{} {
+		// Создаем новый writer при необходимости
+		return gzip.NewWriter(nil)
+	},
+}
 
 // в данном случае мы используем не встраивание а композицию, поэтому надо определить все методы интерфейса под который мы мимикрируем
 type GZIPCompressWriter struct {
 	w    http.ResponseWriter
 	zipw *gzip.Writer
+	pool *sync.Pool
 }
 
 // Дополнительные процедуры типа конструктор/деструктор
 func newGZIPCompressWriter(dst http.ResponseWriter) *GZIPCompressWriter {
-	return &GZIPCompressWriter{w: dst, zipw: gzip.NewWriter(dst)}
+	zipw := gzipWriterPool.Get().(*gzip.Writer)
+	zipw.Reset(dst)
+	return &GZIPCompressWriter{w: dst, zipw: zipw, pool: &gzipWriterPool}
 }
 
 func (cw *GZIPCompressWriter) Close() error {
-	return cw.zipw.Close()
+	err := cw.zipw.Close()
+	cw.pool.Put(cw.zipw)
+	return err
 }
 
 // Реализация интерфейса http.ResponseWriter
@@ -40,7 +52,7 @@ func (cw *GZIPCompressWriter) WriteHeader(statusCode int) {
 	cw.w.WriteHeader(statusCode)
 }
 
-//---------------------------------------------------------------------compressReader
+// ---------------------------------------------------------------------compressReader
 
 // в данном случае мы используем не встраивание а композицию, поэтому надо определить все методы интерфейса под который мы мимикрируем
 type GZIPCompressReader struct {

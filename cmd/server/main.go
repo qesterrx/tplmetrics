@@ -17,9 +17,17 @@ import (
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	_ "net/http/pprof"
 )
 
 func main() {
+
+	// Запускаем HTTP сервер для pprof
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	if err := run(); err != nil {
 		panic(err)
 	}
