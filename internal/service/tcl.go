@@ -20,30 +20,30 @@ import (
 type MetricaStorage interface {
 
 	//UpdateMetrica - Метод для обновления данных метрики
-	UpdateMetrica(model.Metrica) error
+	UpdateMetrica(ctx context.Context, mtrk model.Metrica) error
 
 	//UpdateMetricaBatch - Обновление массива метрик
-	UpdateMetricaBatch([]model.Metrica) error
+	UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error
 
 	//GetMetrica - Метод получения экземпляра метрики по имени
-	GetMetrica(name string, kind string) (model.Metrica, error)
+	GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error)
 
 	//GetAllMetrics - Получение всех метрик
-	GetAllMetrics() []model.Metrica
+	GetAllMetrics(ctx context.Context) []model.Metrica
 
 	//WriteMetrics - Метод для "сброса" накопившихся записей в долговременное хранилище
-	WriteMetrics() error
+	WriteMetrics(ctx context.Context) error
 
 	//Check - Проверка хранилища
-	Check() error
+	Check(ctx context.Context) error
 
 	//Debug - Отладочный вызов
-	Debug()
+	Debug(ctx context.Context)
 }
 
 // UpdateMetricaSubscriber - интерфейс подписчика аудита
 type UpdateMetricaSubscriber interface {
-	PushNotify(msg []byte)
+	PushNotify(ctx context.Context, msg []byte)
 }
 
 // TCLService - Структура объекта содержащего сервисный слой обработчиков
@@ -121,8 +121,6 @@ func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 
 	}
 
-	storage.Debug()
-
 	/*Раз уж мы передали всю конфигурацию сюда, то и подписчиков создадим тут*/
 	subs := []UpdateMetricaSubscriber{}
 	if config.AuditFile != "" {
@@ -137,12 +135,12 @@ func NewTCLService(config *config.ConfigServer) (*TCLService, error) {
 
 // Check - метод проверки готовности хранилища
 func (tcl *TCLService) Check(ctx context.Context) error {
-	return tcl.storage.Check()
+	return tcl.storage.Check(ctx)
 }
 
 // UpdateMetrica - метод обновления значения метрики
 func (tcl *TCLService) UpdateMetrica(ctx context.Context, mtrk model.Metrica) error {
-	res := tcl.storage.UpdateMetrica(mtrk)
+	res := tcl.storage.UpdateMetrica(ctx, mtrk)
 
 	//Аудит
 	mtrks := []model.Metrica{}
@@ -154,7 +152,7 @@ func (tcl *TCLService) UpdateMetrica(ctx context.Context, mtrk model.Metrica) er
 
 // UpdateMetricaBatch - метод для пакетного обновления метрик
 func (tcl *TCLService) UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error {
-	res := tcl.storage.UpdateMetricaBatch(mtrks)
+	res := tcl.storage.UpdateMetricaBatch(ctx, mtrks)
 
 	//Аудит
 	tcl.notifyUpdateMetrica(ctx, mtrks)
@@ -164,12 +162,12 @@ func (tcl *TCLService) UpdateMetricaBatch(ctx context.Context, mtrks []model.Met
 
 // GetMetrica - метод получения экземпляра метрики по имени
 func (tcl *TCLService) GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error) {
-	return tcl.storage.GetMetrica(name, kind)
+	return tcl.storage.GetMetrica(ctx, name, kind)
 }
 
 // GetAllMetrics - метод получения всех метрик
 func (tcl *TCLService) GetAllMetrics(ctx context.Context) []model.Metrica {
-	return tcl.storage.GetAllMetrics()
+	return tcl.storage.GetAllMetrics(ctx)
 }
 
 // AddUpdateMetricaSubscriber - Добавляет подписчика аудита для уведомления об обновлении метрик
@@ -209,7 +207,7 @@ func (tcl *TCLService) notifyUpdateMetrica(ctx context.Context, mtrks []model.Me
 	}
 
 	for _, sub := range tcl.subs {
-		sub.PushNotify(json)
+		sub.PushNotify(ctx, json)
 	}
 
 }
@@ -225,13 +223,13 @@ func (tcl *TCLService) TickerWriteMetrics(ctx context.Context) {
 		case <-ctx.Done():
 			logger.Log.Debug().Msg("Завершение TickerWriteMetrics по контексту")
 			//Перед тем как выйти сделаем запись
-			err := tcl.storage.WriteMetrics()
+			err := tcl.storage.WriteMetrics(ctx)
 			if err != nil {
 				logger.Log.Error().Msg("TickerWriteMetrics Ошибка при сохранении данных в файл" + err.Error())
 			}
 			return
 		case <-ticker.C:
-			err := tcl.storage.WriteMetrics()
+			err := tcl.storage.WriteMetrics(ctx)
 			if err != nil {
 				logger.Log.Error().Msg("TickerWriteMetrics Ошибка при сохранении данных в файл" + err.Error())
 			}

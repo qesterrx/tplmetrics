@@ -57,7 +57,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 	}
 
 	//Переопределим параметрами из ENV
-	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {
+	if envServerHost, exists := os.LookupEnv("ADDRESS"); exists && envServerHost != "" {
 		newServerHost := NetAddress{}
 		err := newServerHost.Set(envServerHost)
 		if err != nil {
@@ -67,7 +67,7 @@ func ParseParamsServer() (*ConfigServer, error) {
 		}
 	}
 
-	if envStoreInterval := os.Getenv("STORE_INTERVAL"); envStoreInterval != "" {
+	if envStoreInterval, exists := os.LookupEnv("STORE_INTERVAL"); exists && envStoreInterval != "" {
 		intStoreInterval, err := strconv.ParseInt(envStoreInterval, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $STORE_INTERVAL has wrong format: %v", err.Error())
@@ -76,11 +76,11 @@ func ParseParamsServer() (*ConfigServer, error) {
 		cfg.StoreInterval = int(intStoreInterval)
 	}
 
-	if envFileStorageName := os.Getenv("FILE_STORAGE_PATH"); envFileStorageName != "" {
+	if envFileStorageName, exists := os.LookupEnv("FILE_STORAGE_PATH"); exists && envFileStorageName != "" {
 		cfg.FileStorageName = envFileStorageName
 	}
 
-	if envRestoreFromFileStorage := os.Getenv("RESTORE"); envRestoreFromFileStorage == "true" || envRestoreFromFileStorage == "false" {
+	if envRestoreFromFileStorage, exists := os.LookupEnv("RESTORE"); exists && (envRestoreFromFileStorage == "true" || envRestoreFromFileStorage == "false") {
 		if envRestoreFromFileStorage == "true" {
 			cfg.RestoreFromFileStorage = true
 		} else {
@@ -88,19 +88,19 @@ func ParseParamsServer() (*ConfigServer, error) {
 		}
 	}
 
-	if envDatabaseDSN := os.Getenv("DATABASE_DSN"); envDatabaseDSN != "" {
+	if envDatabaseDSN, exists := os.LookupEnv("DATABASE_DSN"); exists && envDatabaseDSN != "" {
 		cfg.DatabaseDSN = envDatabaseDSN
 	}
 
-	if envKey := os.Getenv("KEY"); envKey != "" {
+	if envKey, exists := os.LookupEnv("KEY"); exists && envKey != "" {
 		cfg.SecretKeyForSign = envKey
 	}
 
-	if envAuditFile := os.Getenv("AUDIT_FILE"); envAuditFile != "" {
+	if envAuditFile, exists := os.LookupEnv("AUDIT_FILE"); exists && envAuditFile != "" {
 		cfg.AuditFile = envAuditFile
 	}
 
-	if envAuditURL := os.Getenv("AUDIT_URL"); envAuditURL != "" {
+	if envAuditURL, exists := os.LookupEnv("AUDIT_URL"); exists && envAuditURL != "" {
 		cfg.AuditURL = envAuditURL
 	}
 

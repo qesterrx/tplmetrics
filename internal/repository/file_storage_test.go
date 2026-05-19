@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 func TestFileStorage_UpdateMetrica(t *testing.T) {
 	// Создаем временный файл для тестов
+	ctx := context.Background()
 	tmpFile, err := os.CreateTemp("", "file_storage_test_*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -23,24 +25,24 @@ func TestFileStorage_UpdateMetrica(t *testing.T) {
 	require.NoError(t, err)
 
 	// --- Base Counter
-	err = fs.UpdateMetrica(model.NewMetricaCounter("c1", 1))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 1))
 	require.NoError(t, err)
 
-	err = fs.UpdateMetrica(model.NewMetricaCounter("c1", 1))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 1))
 	assert.NoError(t, err)
 
-	c1, err := fs.GetMetrica("c1", string(model.Counter))
+	c1, err := fs.GetMetrica(ctx, "c1", string(model.Counter))
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaCounter(int64(2)), c1.Value())
 
 	// --- Base Gauge
-	err = fs.UpdateMetrica(model.NewMetricaGauge("g1", 1.0001))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaGauge("g1", 1.0001))
 	require.NoError(t, err)
 
-	err = fs.UpdateMetrica(model.NewMetricaGauge("g1", 2.2222))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaGauge("g1", 2.2222))
 	assert.NoError(t, err)
 
-	g1, err := fs.GetMetrica("g1", string(model.Gauge))
+	g1, err := fs.GetMetrica(ctx, "g1", string(model.Gauge))
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaGauge(float64(2.2222)), g1.Value())
 
@@ -56,6 +58,7 @@ func TestFileStorage_UpdateMetrica(t *testing.T) {
 }
 
 func TestFileStorage_UpdateMetrica_AsyncMode(t *testing.T) {
+	ctx := context.Background()
 	// Тест для асинхронного режима (без автоматической записи в файл)
 	tmpFile, err := os.CreateTemp("", "file_storage_async_*.json")
 	require.NoError(t, err)
@@ -66,7 +69,7 @@ func TestFileStorage_UpdateMetrica_AsyncMode(t *testing.T) {
 	fs, err := NewFileStorage(ms, tmpFile.Name(), config.MetricaStorageModeAsync, false)
 	require.NoError(t, err)
 
-	err = fs.UpdateMetrica(model.NewMetricaCounter("c1", 10))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 10))
 	require.NoError(t, err)
 
 	// В асинхронном режиме данные не должны автоматически записаться в файл
@@ -75,7 +78,7 @@ func TestFileStorage_UpdateMetrica_AsyncMode(t *testing.T) {
 	assert.Empty(t, data) // Файл должен быть пустым
 
 	// Ручная синхронизация
-	err = fs.WriteMetrics()
+	err = fs.WriteMetrics(ctx)
 	require.NoError(t, err)
 
 	// Теперь данные должны быть в файле
@@ -85,6 +88,7 @@ func TestFileStorage_UpdateMetrica_AsyncMode(t *testing.T) {
 }
 
 func TestFileStorage_GetMetric(t *testing.T) {
+	ctx := context.Background()
 	tmpFile, err := os.CreateTemp("", "file_storage_get_test_*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -97,26 +101,27 @@ func TestFileStorage_GetMetric(t *testing.T) {
 	fs, err := NewFileStorage(ms, tmpFile.Name(), config.MetricaStorageModeSync, false)
 	require.NoError(t, err)
 
-	err = fs.UpdateMetrica(model.NewMetricaCounter("c1", counterValue))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaCounter("c1", counterValue))
 	require.NoError(t, err)
-	err = fs.UpdateMetrica(model.NewMetricaGauge("g1", gaugeValue))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaGauge("g1", gaugeValue))
 	require.NoError(t, err)
 
-	mtrk, err := fs.GetMetrica("c1", string(model.Counter))
+	mtrk, err := fs.GetMetrica(ctx, "c1", string(model.Counter))
 	assert.NoError(t, err)
 	assert.Equal(t, model.Counter, mtrk.Kind())
 	assert.Equal(t, model.FormatMetricaCounter(counterValue), mtrk.Value())
 
-	mtrk, err = fs.GetMetrica("g1", string(model.Gauge))
+	mtrk, err = fs.GetMetrica(ctx, "g1", string(model.Gauge))
 	assert.NoError(t, err)
 	assert.Equal(t, model.Gauge, mtrk.Kind())
 	assert.Equal(t, model.FormatMetricaGauge(gaugeValue), mtrk.Value())
 
-	_, err = fs.GetMetrica("notfound", "counter")
+	_, err = fs.GetMetrica(ctx, "notfound", "counter")
 	assert.Error(t, err)
 }
 
 func TestFileStorage_RestoreFromFile(t *testing.T) {
+	ctx := context.Background()
 	// Сначала создаем файл с данными
 	tmpFile, err := os.CreateTemp("", "file_storage_restore_*.json")
 	require.NoError(t, err)
@@ -141,16 +146,17 @@ func TestFileStorage_RestoreFromFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Проверяем, что данные восстановились
-	c1, err := fs.GetMetrica("c_restore", string(model.Counter))
+	c1, err := fs.GetMetrica(ctx, "c_restore", string(model.Counter))
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaCounter(100), c1.Value())
 
-	g1, err := fs.GetMetrica("g_restore", string(model.Gauge))
+	g1, err := fs.GetMetrica(ctx, "g_restore", string(model.Gauge))
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaGauge(99.99), g1.Value())
 }
 
 func TestFileStorage_RestoreFromEmptyFile(t *testing.T) {
+	ctx := context.Background()
 	// Создаем пустой файл
 	tmpFile, err := os.CreateTemp("", "file_storage_empty_*.json")
 	require.NoError(t, err)
@@ -163,11 +169,12 @@ func TestFileStorage_RestoreFromEmptyFile(t *testing.T) {
 	require.NoError(t, err)
 
 	// Проверяем, что хранилище пустое
-	metrics := fs.GetAllMetrics()
+	metrics := fs.GetAllMetrics(ctx)
 	assert.Empty(t, metrics)
 }
 
 func TestFileStorage_UpdateMetricaBatch(t *testing.T) {
+	ctx := context.Background()
 	tmpFile, err := os.CreateTemp("", "file_storage_batch_*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -184,19 +191,20 @@ func TestFileStorage_UpdateMetricaBatch(t *testing.T) {
 		model.NewMetricaGauge("batch_g1", 2.5), // должно стать 2.5
 	}
 
-	err = fs.UpdateMetricaBatch(batch)
+	err = fs.UpdateMetricaBatch(ctx, batch)
 	require.NoError(t, err)
 
-	c1, err := fs.GetMetrica("batch_c1", string(model.Counter))
+	c1, err := fs.GetMetrica(ctx, "batch_c1", string(model.Counter))
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaCounter(30), c1.Value())
 
-	g1, err := fs.GetMetrica("batch_g1", string(model.Gauge))
+	g1, err := fs.GetMetrica(ctx, "batch_g1", string(model.Gauge))
 	assert.NoError(t, err)
 	assert.Equal(t, model.FormatMetricaGauge(2.5), g1.Value())
 }
 
 func TestFileStorage_GetAllMetrics(t *testing.T) {
+	ctx := context.Background()
 	tmpFile, err := os.CreateTemp("", "file_storage_all_*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -213,11 +221,11 @@ func TestFileStorage_GetAllMetrics(t *testing.T) {
 	}
 
 	for _, m := range metrics {
-		err = fs.UpdateMetrica(m)
+		err = fs.UpdateMetrica(ctx, m)
 		require.NoError(t, err)
 	}
 
-	allMetrics := fs.GetAllMetrics()
+	allMetrics := fs.GetAllMetrics(ctx)
 	assert.Len(t, allMetrics, 3)
 
 	// Проверяем сортировку по имени (MemStorage.GetAllMetrics сортирует ключи)
@@ -229,6 +237,7 @@ func TestFileStorage_GetAllMetrics(t *testing.T) {
 }
 
 func TestFileStorage_WriteMetrics_OnlyWhenChanged(t *testing.T) {
+	ctx := context.Background()
 	tmpFile, err := os.CreateTemp("", "file_storage_changed_*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -243,17 +252,17 @@ func TestFileStorage_WriteMetrics_OnlyWhenChanged(t *testing.T) {
 	assert.Empty(t, data)
 
 	// Вызов WriteMetrics без изменений - файл должен остаться пустым
-	err = fs.WriteMetrics()
+	err = fs.WriteMetrics(ctx)
 	require.NoError(t, err)
 	data, _ = os.ReadFile(tmpFile.Name())
 	assert.Empty(t, data)
 
 	// Добавляем метрику
-	err = fs.UpdateMetrica(model.NewMetricaCounter("c1", 42))
+	err = fs.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 42))
 	require.NoError(t, err)
 
 	// Теперь WriteMetrics должен записать данные
-	err = fs.WriteMetrics()
+	err = fs.WriteMetrics(ctx)
 	require.NoError(t, err)
 	data, _ = os.ReadFile(tmpFile.Name())
 	assert.NotEmpty(t, data)
@@ -261,13 +270,14 @@ func TestFileStorage_WriteMetrics_OnlyWhenChanged(t *testing.T) {
 	// Повторный вызов WriteMetrics без новых изменений не должен перезаписывать файл?
 	// По логике hasChanged сброшен, поэтому повторная запись не произойдет
 	modTime1, _ := os.Stat(tmpFile.Name())
-	err = fs.WriteMetrics()
+	err = fs.WriteMetrics(ctx)
 	require.NoError(t, err)
 	modTime2, _ := os.Stat(tmpFile.Name())
 	assert.Equal(t, modTime1.ModTime(), modTime2.ModTime())
 }
 
 func TestFileStorage_Check(t *testing.T) {
+	ctx := context.Background()
 	tmpFile, err := os.CreateTemp("", "file_storage_check_*.json")
 	require.NoError(t, err)
 	defer os.Remove(tmpFile.Name())
@@ -277,6 +287,6 @@ func TestFileStorage_Check(t *testing.T) {
 	fs, err := NewFileStorage(ms, tmpFile.Name(), config.MetricaStorageModeAsync, false)
 	require.NoError(t, err)
 
-	err = fs.Check()
+	err = fs.Check(ctx)
 	assert.NoError(t, err)
 }

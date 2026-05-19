@@ -2,6 +2,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -70,7 +71,7 @@ func NewFileStorage(ms *MemStorage, filename string, mode config.MetricaStorageM
 				if err != nil {
 					return nil, err
 				}
-				fs.MemStorage.UpdateMetrica(mtrk)
+				fs.MemStorage.UpdateMetrica(context.Background(), mtrk)
 			}
 		}
 
@@ -80,21 +81,21 @@ func NewFileStorage(ms *MemStorage, filename string, mode config.MetricaStorageM
 }
 
 // GetMetrica - возвращает метрику по имени и типу
-func (fs *FileStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
-	return fs.MemStorage.GetMetrica(name, kind)
+func (fs *FileStorage) GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error) {
+	return fs.MemStorage.GetMetrica(ctx, name, kind)
 }
 
 // UpdateMetrica - обновляет метрику
-func (fs *FileStorage) UpdateMetrica(mtrk model.Metrica) error {
+func (fs *FileStorage) UpdateMetrica(ctx context.Context, mtrk model.Metrica) error {
 
-	err := fs.MemStorage.UpdateMetrica(mtrk)
+	err := fs.MemStorage.UpdateMetrica(ctx, mtrk)
 	if err != nil {
 		return err
 	}
 
 	fs.hasChanged = true
 	if fs.mode == config.MetricaStorageModeSync {
-		err := fs.WriteMetrics()
+		err := fs.WriteMetrics(ctx)
 		if err != nil {
 			return err
 		}
@@ -104,15 +105,15 @@ func (fs *FileStorage) UpdateMetrica(mtrk model.Metrica) error {
 }
 
 // UpdateMetricaBatch Обновляет массив метрик
-func (fs *FileStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
-	err := fs.MemStorage.UpdateMetricaBatch(mtrks)
+func (fs *FileStorage) UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error {
+	err := fs.MemStorage.UpdateMetricaBatch(ctx, mtrks)
 	if err != nil {
 		return err
 	}
 
 	fs.hasChanged = true
 	if fs.mode == config.MetricaStorageModeSync {
-		err := fs.WriteMetrics()
+		err := fs.WriteMetrics(ctx)
 		if err != nil {
 			return err
 		}
@@ -122,23 +123,23 @@ func (fs *FileStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 }
 
 // AllMetrics - Получение всех сохраненных метрик с сортировкой по имени
-func (fs *FileStorage) GetAllMetrics() []model.Metrica {
-	return fs.MemStorage.GetAllMetrics()
+func (fs *FileStorage) GetAllMetrics(ctx context.Context) []model.Metrica {
+	return fs.MemStorage.GetAllMetrics(ctx)
 }
 
 // Debug - Показываем текущее состояние в output
-func (fs *FileStorage) Debug() {
-	fs.MemStorage.Debug()
+func (fs *FileStorage) Debug(ctx context.Context) {
+	fs.MemStorage.Debug(ctx)
 }
 
 // WriteMetrics - Метод для записи данных в хранилище
 // Обновление файла происходит только если есть хоть одна метрика которая была изменена после последнего сохранения
-func (fs *FileStorage) WriteMetrics() error {
+func (fs *FileStorage) WriteMetrics(ctx context.Context) error {
 	if fs.hasChanged {
 
 		logger.Log.Debug().Msg("Синхронизация данных в файл")
 
-		mtrks := fs.MemStorage.GetAllMetrics()
+		mtrks := fs.MemStorage.GetAllMetrics(ctx)
 
 		bytes, err := json.Marshal(&mtrks)
 		if err != nil {
@@ -158,6 +159,6 @@ func (fs *FileStorage) WriteMetrics() error {
 }
 
 // Check - Проверка хранилища, заглушка, FileStorage всегда готов к работе
-func (fs *FileStorage) Check() error {
+func (fs *FileStorage) Check(ctx context.Context) error {
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
 	"github.com/qesterrx/tplmetrics/internal/agent"
@@ -13,6 +12,7 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -33,41 +33,33 @@ func RunAgent(config *config.ConfigAgent) {
 	queueToGroup := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
 	queueToSend := make(chan []byte, config.RateLimit)
 
-	wg := sync.WaitGroup{}
+	g, ctx := errgroup.WithContext(ctx)
 
 	//Сборщик записывает метрики в queueToGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		agent.Collector(ctx, queueToGroup, config.PoolInterval)
-		cancel()
-	}()
+		return nil
+	})
 
 	//Дополнительный сборщик записывает метрики в queueToGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		agent.CollectorAdd(ctx, queueToGroup, config.PoolInterval)
-		cancel()
-	}()
+		return nil
+	})
 
 	//Репортер берет метрики из queueToGroup, группирует, сериализует и пытается отправить
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		agent.Reporter(ctx, queueToGroup, queueToSend, config.ReportInterval)
-		cancel()
-	}()
+		return nil
+	})
 
 	//Пул сендеров занимается отправкой
 	for i := 1; i <= config.RateLimit; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		g.Go(func() error {
 			url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
 			agent.Sender(ctx, queueToSend, i, url, config.SecretKeyForSign)
-			cancel()
-		}()
+			return nil
+		})
 	}
 
 	sigChan := make(chan os.Signal, 1)
@@ -76,6 +68,5 @@ func RunAgent(config *config.ConfigAgent) {
 	<-sigChan
 	cancel()
 	logger.Log.Debug().Msg("Ожидание завершения программы")
-	wg.Wait()
 
 }

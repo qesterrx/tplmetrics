@@ -18,7 +18,7 @@ type UpdateMetricaSubscriberFile struct {
 }
 
 // PushNotify - метод для добавления аудита в файл
-func (umsf *UpdateMetricaSubscriberFile) PushNotify(msg []byte) {
+func (umsf *UpdateMetricaSubscriberFile) PushNotify(ctx context.Context, msg []byte) {
 
 	file, err := os.OpenFile(umsf.FileName, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
@@ -44,12 +44,12 @@ type UpdateMetricaSubscriberClient struct {
 }
 
 // PushNotify - метод для отправки аудита на указанный URL
-func (umsc *UpdateMetricaSubscriberClient) PushNotify(msg []byte) {
+func (umsc *UpdateMetricaSubscriberClient) PushNotify(ctx context.Context, msg []byte) {
 	if umsc.client == nil {
 		umsc.client = resty.New()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
 	defer cancel()
 
 	resp, err := umsc.client.R().

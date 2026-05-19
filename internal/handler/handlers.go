@@ -23,7 +23,7 @@ import (
 func (hc *HandlerContainer) PingDBHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("PingDBHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -52,7 +52,7 @@ func (hc *HandlerContainer) GetAllCurrentMetricsHandler(w http.ResponseWriter, r
 
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("GetAllCurrentMetricsHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -99,7 +99,7 @@ func (hc *HandlerContainer) GetMetricaHandler(w http.ResponseWriter, r *http.Req
 
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("GetMetricaHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 

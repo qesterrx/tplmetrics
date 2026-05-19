@@ -40,7 +40,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	fs.Parse(os.Args[1:])
 
 	//Переопределим параметрами из ENV
-	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {
+	if envServerHost, exists := os.LookupEnv("ADDRESS"); exists && envServerHost != "" {
 		newServerHost := NetAddress{}
 		err := newServerHost.Set(envServerHost)
 		if err != nil {
@@ -50,7 +50,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		}
 	}
 
-	if envPoolInterval := os.Getenv("POLL_INTERVAL"); envPoolInterval != "" {
+	if envPoolInterval, exists := os.LookupEnv("POLL_INTERVAL"); exists && envPoolInterval != "" {
 		intPoolInterval, err := strconv.ParseInt(envPoolInterval, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $POLL_INTERVAL has wrong format: %v", err.Error())
@@ -58,7 +58,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.PoolInterval = int(intPoolInterval)
 	}
 
-	if envReportInterval := os.Getenv("REPORT_INTERVAL"); envReportInterval != "" {
+	if envReportInterval, exists := os.LookupEnv("REPORT_INTERVAL"); exists && envReportInterval != "" {
 		intReportInterval, err := strconv.ParseInt(envReportInterval, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $REPORT_INTERVAL has wrong format: %v", err.Error())
@@ -66,7 +66,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.ReportInterval = int(intReportInterval)
 	}
 
-	if envRateLimit := os.Getenv("RATE_LIMIT"); envRateLimit != "" {
+	if envRateLimit, exists := os.LookupEnv("RATE_LIMIT"); exists && envRateLimit != "" {
 		intRateLimit, err := strconv.ParseInt(envRateLimit, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $RATE_LIMIT has wrong format: %v", err.Error())
@@ -74,7 +74,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.RateLimit = int(intRateLimit)
 	}
 
-	if envKey := os.Getenv("KEY"); envKey != "" {
+	if envKey, exists := os.LookupEnv("KEY"); exists && envKey != "" {
 		cfg.SecretKeyForSign = envKey
 	}
 

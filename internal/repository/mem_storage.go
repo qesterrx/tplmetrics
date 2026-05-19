@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -14,7 +15,7 @@ import (
 type MemStorage struct {
 	storage map[string]model.Metrica
 	keys    []string
-	mtx     sync.Mutex
+	mu      sync.RWMutex
 }
 
 // NewMemStorage - функция возвращает новый экземпляр MemStorage
@@ -29,7 +30,7 @@ func NewMemStorage() *MemStorage {
 }
 
 // GetMetrica - возвращает метрику по имени и типу
-func (ms *MemStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
+func (ms *MemStorage) GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error) {
 
 	//Так уж и быть поддержим одинаковые имена метрик разного типа
 	key := kind + "_" + name
@@ -44,12 +45,12 @@ func (ms *MemStorage) GetMetrica(name string, kind string) (model.Metrica, error
 }
 
 // UpdateMetrica - обновляет метрику
-func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
+func (ms *MemStorage) UpdateMetrica(ctx context.Context, mtrk model.Metrica) error {
 
 	key := string(mtrk.Kind()) + "_" + mtrk.Name()
 
-	ms.mtx.Lock()
-	defer ms.mtx.Unlock()
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 
 	mtrkSaved, ok := ms.storage[key]
 	if ok {
@@ -67,10 +68,10 @@ func (ms *MemStorage) UpdateMetrica(mtrk model.Metrica) error {
 }
 
 // UpdateMetricaBatch Обновляет массив метрик
-func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
+func (ms *MemStorage) UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error {
 
-	ms.mtx.Lock()
-	defer ms.mtx.Unlock()
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
 
 	touched, err := ms.startUpdateMetricaBatch(mtrks)
 	if err != nil {
@@ -83,43 +84,53 @@ func (ms *MemStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 }
 
 // AllMetrics - Получение всех сохраненных метрик с сортировкой по имени
-func (ms *MemStorage) GetAllMetrics() []model.Metrica {
+func (ms *MemStorage) GetAllMetrics(ctx context.Context) []model.Metrica {
 
-	sort.Strings(ms.keys)
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
 
-	var mm []model.Metrica
+	keys := make([]string, len(ms.keys))
+	copy(keys, ms.keys)
+	sort.Strings(keys)
 
-	for _, v := range ms.keys {
-		mm = append(mm, ms.storage[v])
+	metrics := make([]model.Metrica, 0, len(keys))
+
+	for _, v := range keys {
+		metrics = append(metrics, ms.storage[v])
 	}
 
-	return mm
+	return metrics
 }
 
 // Debug - Показываем текущее состояние в output
-func (ms *MemStorage) Debug() {
+func (ms *MemStorage) Debug(ctx context.Context) {
 
-	sort.Strings(ms.keys)
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	keys := make([]string, len(ms.keys))
+	copy(keys, ms.keys)
+	sort.Strings(keys)
 
 	fmt.Println("-------------KEYS-------------")
-	for _, v := range ms.keys {
+	for _, v := range keys {
 		fmt.Print(v, " ")
 	}
 
 	fmt.Println("-------------STORAGE-------------")
-	for _, key := range ms.keys {
+	for _, key := range keys {
 		mtrk := ms.storage[key]
 		fmt.Printf("%s [%s]: %s \n", mtrk.Name(), mtrk.Kind(), mtrk.Value())
 	}
 }
 
 // WriteMetrics - заглушка, при хранении в памяти писать некуда
-func (ms *MemStorage) WriteMetrics() error {
+func (ms *MemStorage) WriteMetrics(ctx context.Context) error {
 	return nil
 }
 
 // Check - Проверка хранилища, заглушка, MemStorage всегда готов к работе
-func (ms *MemStorage) Check() error {
+func (ms *MemStorage) Check(ctx context.Context) error {
 	return nil
 }
 

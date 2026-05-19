@@ -95,7 +95,7 @@ func NewPGStorage(ms *MemStorage, db *sql.DB, mode config.MetricaStorageMode) (*
 			return nil, fmt.Errorf("при загрузке данных из БД обнаружен неизвестный тип метрики")
 		}
 
-		err = pgs.MemStorage.UpdateMetrica(mtrk)
+		err = pgs.MemStorage.UpdateMetrica(context.Background(), mtrk)
 		if err != nil {
 			return nil, err
 		}
@@ -111,19 +111,19 @@ func NewPGStorage(ms *MemStorage, db *sql.DB, mode config.MetricaStorageMode) (*
 }
 
 // GetMetrica - возвращает метрику по имени и типу
-func (pgs *PGStorage) GetMetrica(name string, kind string) (model.Metrica, error) {
+func (pgs *PGStorage) GetMetrica(ctx context.Context, name string, kind string) (model.Metrica, error) {
 	//т.к. в памяти у нас кеш то тут напрямую к БД не обращаемся
 	//главное чтобы экзепляр приложения был один и никто другой метрики не менял в БД/ФАЙЛЕ
-	return pgs.MemStorage.GetMetrica(name, kind)
+	return pgs.MemStorage.GetMetrica(ctx, name, kind)
 }
 
 // UpdateMetrica - обновляет метрику
-func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
+func (pgs *PGStorage) UpdateMetrica(ctx context.Context, mtrk model.Metrica) error {
 
 	//Если асинхрон - то просто признак и выходим
 	if pgs.mode != config.MetricaStorageModeSync {
 
-		err := pgs.MemStorage.UpdateMetrica(mtrk)
+		err := pgs.MemStorage.UpdateMetrica(ctx, mtrk)
 		if err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 	//Замыкание для повторов
 	fn := func() error {
 
-		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+		ctxTo, cancelCtxTo := context.WithTimeout(ctx, 1*time.Second)
 		defer cancelCtxTo()
 
 		//По идее тут будут накладные расходы на транзакцию, писать два метода не захотел, мешать в один тоже, может придумаю что получше попозже
@@ -165,7 +165,7 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 	}
 
 	//Выполнение метода
-	err = retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+	err = retry.RetryFunc(ctx, fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
 	if err != nil {
 		//Откатить изменения в памяти
 		pgs.MemStorage.restoreUpdateMetricaBatch(touched)
@@ -179,7 +179,7 @@ func (pgs *PGStorage) UpdateMetrica(mtrk model.Metrica) error {
 }
 
 // UpdateMetricaBatch Обновляет массив метрик
-func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
+func (pgs *PGStorage) UpdateMetricaBatch(ctx context.Context, mtrks []model.Metrica) error {
 
 	if len(mtrks) == 0 {
 		return nil
@@ -188,7 +188,7 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	//Если асинхрон - то просто признак и выходим
 	if pgs.mode != config.MetricaStorageModeSync {
 
-		err := pgs.MemStorage.UpdateMetricaBatch(mtrks)
+		err := pgs.MemStorage.UpdateMetricaBatch(ctx, mtrks)
 		if err != nil {
 			return err
 		}
@@ -207,7 +207,7 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	//Замыкание для повторов
 	fn := func() error {
 
-		ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+		ctxTo, cancelCtxTo := context.WithTimeout(ctx, 1*time.Second)
 		defer cancelCtxTo()
 
 		tx, err := pgs.db.BeginTx(ctxTo, nil)
@@ -232,7 +232,7 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 	}
 
 	//Выполнение метода
-	err = retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+	err = retry.RetryFunc(ctx, fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
 	if err != nil {
 		//Откатить изменения в памяти
 		pgs.MemStorage.restoreUpdateMetricaBatch(touched)
@@ -246,18 +246,18 @@ func (pgs *PGStorage) UpdateMetricaBatch(mtrks []model.Metrica) error {
 }
 
 // AllMetrics - Получение всех сохраненных метрик с сортировкой по имени
-func (pgs *PGStorage) GetAllMetrics() []model.Metrica {
-	return pgs.MemStorage.GetAllMetrics()
+func (pgs *PGStorage) GetAllMetrics(ctx context.Context) []model.Metrica {
+	return pgs.MemStorage.GetAllMetrics(ctx)
 }
 
 // Debug - Показываем текущее состояние в output
-func (pgs *PGStorage) Debug() {
-	pgs.MemStorage.Debug()
+func (pgs *PGStorage) Debug(ctx context.Context) {
+	pgs.MemStorage.Debug(ctx)
 }
 
 // WriteMetrics - Метод для записи данных в хранилище
 // Обновление файла происходит только если есть хоть одна метрика которая была изменена после последнего сохранения
-func (pgs *PGStorage) WriteMetrics() error {
+func (pgs *PGStorage) WriteMetrics(ctx context.Context) error {
 
 	if pgs.hasChanged {
 
@@ -265,7 +265,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 
 		//Замыкание для повторов
 		fn := func() error {
-			ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+			ctxTo, cancelCtxTo := context.WithTimeout(ctx, 1*time.Second)
 			defer cancelCtxTo()
 
 			tx, err := pgs.db.BeginTx(ctxTo, nil)
@@ -273,7 +273,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 				return err
 			}
 
-			mtrks := pgs.MemStorage.GetAllMetrics()
+			mtrks := pgs.MemStorage.GetAllMetrics(ctx)
 			for _, mtrk := range mtrks {
 				err := pgs.sqlUpdateMetricaTx(ctxTo, tx, mtrk, "current")
 				if err != nil {
@@ -288,7 +288,7 @@ func (pgs *PGStorage) WriteMetrics() error {
 		}
 
 		//Выполнение метода
-		return retry.RetryFunc(context.Background(), fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
+		return retry.RetryFunc(ctx, fn, checkRetryPg, 3, 1*time.Second, 2*time.Second)
 
 	}
 
@@ -296,8 +296,8 @@ func (pgs *PGStorage) WriteMetrics() error {
 }
 
 // Check - Проверка хранилища
-func (pgs *PGStorage) Check() error {
-	ctxTo, cancelCtxTo := context.WithTimeout(context.Background(), 1*time.Second)
+func (pgs *PGStorage) Check(ctx context.Context) error {
+	ctxTo, cancelCtxTo := context.WithTimeout(ctx, 1*time.Second)
 	defer cancelCtxTo()
 	return pgs.db.PingContext(ctxTo)
 }
@@ -323,13 +323,13 @@ func (pgs *PGStorage) sqlUpdateMetricaTx(ctx context.Context, tx *sql.Tx, mtrk m
 	}
 
 	_, err := tx.ExecContext(ctx, `
-INSERT INTO metrics (id, kind, delta, value, updated)
-VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
-ON CONFLICT (id, kind)
-DO UPDATE SET
-    delta = EXCLUDED.delta,
-    value = EXCLUDED.value,
-    updated = EXCLUDED.updated`, mtrk.Name(), mtrk.Kind(), delta, value)
+			INSERT INTO metrics (id, kind, delta, value, updated)
+			VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+			ON CONFLICT (id, kind)
+			DO UPDATE SET
+				delta = EXCLUDED.delta,
+				value = EXCLUDED.value,
+				updated = EXCLUDED.updated`, mtrk.Name(), mtrk.Kind(), delta, value)
 
 	if err != nil {
 		return err
