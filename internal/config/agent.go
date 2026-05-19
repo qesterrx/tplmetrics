@@ -1,3 +1,4 @@
+// Пакет config содержит в себе описание объектов и функция для конфигурации приложения (клиента или сервера)
 package config
 
 import (
@@ -7,24 +8,26 @@ import (
 	"strconv"
 )
 
-const ClientErrorCount = 1000
-
+// ConfigAgent структура для хранения конфигурации клиента, содержит следующие поля
+// ServerHost Адрес клиента, задается параметром "a" или переменной окружения ADDRESS
+// PoolInterval Интервал опроса метрик, задается параметром "p" или переменной окружения POLL_INTERVAL
+// ReportInterval Интервал отправки метрик на сервер, задается параметром "r" или переменной окружения REPORT_INTERVAL
+// RateLimit - Количество горутин, отправляющий данные на сервер, задается параметром "l" или переменной окружения RATE_LIMIT
+// SecretKeyForSign Ключ для HMAC шифрования сообщения перед отправкой, задается параметром "k" или переменной окружения KEY
 type ConfigAgent struct {
 	ServerHost       NetAddress
 	PoolInterval     int
 	ReportInterval   int
-	ClientErrorCount int
 	RateLimit        int
 	SecretKeyForSign string
 }
 
+// ParseParamsAgent - Процедура создания структуры ConfigAgent на основе параметров командной строки и переменных окружения
 func ParseParamsAgent() (*ConfigAgent, error) {
 
 	fs := flag.NewFlagSet("", flag.PanicOnError)
 
 	var cfg ConfigAgent
-
-	cfg.ClientErrorCount = ClientErrorCount
 
 	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
 	fs.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
@@ -37,7 +40,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	fs.Parse(os.Args[1:])
 
 	//Переопределим параметрами из ENV
-	if envServerHost := os.Getenv("ADDRESS"); envServerHost != "" {
+	if envServerHost, exists := os.LookupEnv("ADDRESS"); exists && envServerHost != "" {
 		newServerHost := NetAddress{}
 		err := newServerHost.Set(envServerHost)
 		if err != nil {
@@ -47,7 +50,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		}
 	}
 
-	if envPoolInterval := os.Getenv("POLL_INTERVAL"); envPoolInterval != "" {
+	if envPoolInterval, exists := os.LookupEnv("POLL_INTERVAL"); exists && envPoolInterval != "" {
 		intPoolInterval, err := strconv.ParseInt(envPoolInterval, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $POLL_INTERVAL has wrong format: %v", err.Error())
@@ -55,7 +58,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.PoolInterval = int(intPoolInterval)
 	}
 
-	if envReportInterval := os.Getenv("REPORT_INTERVAL"); envReportInterval != "" {
+	if envReportInterval, exists := os.LookupEnv("REPORT_INTERVAL"); exists && envReportInterval != "" {
 		intReportInterval, err := strconv.ParseInt(envReportInterval, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $REPORT_INTERVAL has wrong format: %v", err.Error())
@@ -63,7 +66,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.ReportInterval = int(intReportInterval)
 	}
 
-	if envRateLimit := os.Getenv("RATE_LIMIT"); envRateLimit != "" {
+	if envRateLimit, exists := os.LookupEnv("RATE_LIMIT"); exists && envRateLimit != "" {
 		intRateLimit, err := strconv.ParseInt(envRateLimit, 10, 0)
 		if err != nil {
 			return nil, fmt.Errorf("env $RATE_LIMIT has wrong format: %v", err.Error())
@@ -71,7 +74,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.RateLimit = int(intRateLimit)
 	}
 
-	if envKey := os.Getenv("KEY"); envKey != "" {
+	if envKey, exists := os.LookupEnv("KEY"); exists && envKey != "" {
 		cfg.SecretKeyForSign = envKey
 	}
 

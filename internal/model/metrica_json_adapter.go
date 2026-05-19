@@ -2,15 +2,23 @@ package model
 
 import "fmt"
 
-// Структура для общения между агентом и сервером а так же для хранения данных в файле
+// MetricaJSONAdapter - Структура для общения между агентом и сервером
+// Необходимость структуры обоснована исходным ТЗ
 type MetricaJSONAdapter struct {
-	Name  string   `json:"id"`              // имя метрики
-	Kind  string   `json:"type"`            // параметр, принимающий значение gauge или counter
-	Delta *int64   `json:"delta,omitempty"` // значение метрики в случае передачи counter
-	Value *float64 `json:"value,omitempty"` // значение метрики в случае передачи gauge
+	// Имя метрики
+	Name string `json:"id"`
+
+	// Тип метрики, параметр принимающий значение gauge или counter
+	Kind string `json:"type"`
+
+	// Значение метрики в случае передачи counter
+	Delta *int64 `json:"delta,omitempty"`
+
+	//Значение метрики в случае передачи gauge
+	Value *float64 `json:"value,omitempty"`
 }
 
-// Преобразуем данные к интерфейсу Metrica
+// Metrica - метод преобразования экземпляра MetricaJSONAdapter в экземпляр Metrica соответствующего типа
 func (mtrk *MetricaJSONAdapter) Metrica() (Metrica, error) {
 	kindValue, err := GetKindValue(mtrk.Kind)
 	if err != nil {

@@ -13,14 +13,23 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/model"
 )
 
+// PingDBHandler - Handler по адресу /ping проверяющий готовность работы сервисного слоя
+// Метод Get
+// Обязательные заголовки
+// - нет
+// Ошибки
+// 400 если метод не GET
+// 500 если проверка сервисного слоя не прошла
 func (hc *HandlerContainer) PingDBHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("PingDBHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	err := hc.tcl.Check()
+	ctx := r.Context()
+
+	err := hc.tcl.Check(ctx)
 	if err != nil {
 		logger.Log.Error().Msg("PingDBHandler не удалось выполнить Ping DB")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -30,15 +39,26 @@ func (hc *HandlerContainer) PingDBHandler(w http.ResponseWriter, r *http.Request
 
 }
 
+// GetAllCurrentMetricsHandler - Handler по адресу / возвращающий все сохраненные сервером метрики
+// * возвращает даже те метрики которые не были записаны в постоянное хранилище
+// Метод Get
+// Обязательные заголовки
+// - нет
+// Результат
+// "Content-Type", "text/html"
+// Ошибки
+// 400 если метод не GET
 func (hc *HandlerContainer) GetAllCurrentMetricsHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("GetAllCurrentMetricsHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	metrics := hc.tcl.GetAllMetrics()
+	ctx := r.Context()
+
+	metrics := hc.tcl.GetAllMetrics(ctx)
 
 	tmpl := `
 		<html>
@@ -66,18 +86,28 @@ func (hc *HandlerContainer) GetAllCurrentMetricsHandler(w http.ResponseWriter, r
 	t.Execute(w, data)
 }
 
-// Получение метрики по URI
+// GetMetricaHandler - Handler по адресу /value/{kind}/{name} возвращающий значение одной метрики заданной именем и типом
+// Метод Get
+// Обязательные заголовки
+// - нет
+// Результат
+// "Content-Type", "text/html"
+// Ошибки
+// 404 если метрика не найдена
+// 400 если метод не GET
 func (hc *HandlerContainer) GetMetricaHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodGet {
 		logger.Log.Info().Msg("GetMetricaHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
+	ctx := r.Context()
+
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
-	mtrk, err := hc.tcl.GetMetrica(name, kind)
+	mtrk, err := hc.tcl.GetMetrica(ctx, name, kind)
 
 	if err != nil {
 		logger.Log.Info().Msg(fmt.Sprintf("GetMetricaHandler ошибка при получении метрики %s, %s: %s", kind, name, err.Error()))
@@ -89,7 +119,15 @@ func (hc *HandlerContainer) GetMetricaHandler(w http.ResponseWriter, r *http.Req
 
 }
 
-// Обновление значения метрики через URI
+// UpdateMetricaHandlerу - Handler по адресу /update/{kind}/{name}/{value} обновление значения одной метрики заданной именем, типом и значением
+// Метод Post
+// Обязательные заголовки
+// - нет
+// Результат
+// "Content-Type", "text/html"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) UpdateMetricaHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -97,6 +135,8 @@ func (hc *HandlerContainer) UpdateMetricaHandler(w http.ResponseWriter, r *http.
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
+
+	ctx := r.Context()
 
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
@@ -109,7 +149,7 @@ func (hc *HandlerContainer) UpdateMetricaHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
-	err = hc.tcl.UpdateMetrica(mtrk)
+	err = hc.tcl.UpdateMetrica(ctx, mtrk)
 	if err != nil {
 		logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaHandler ошибка при обновлении метрики %s, %s, %s : %s", name, kind, value, err.Error()))
 		w.WriteHeader(http.StatusBadRequest)
@@ -120,7 +160,15 @@ func (hc *HandlerContainer) UpdateMetricaHandler(w http.ResponseWriter, r *http.
 
 }
 
-// Обновление значения метрики через json
+// UpdateMetricaJSONHandler - Handler по адресу /update/ обновление значения одной метрики по JSON представлению
+// Метод Post
+// Обязательные заголовки
+// "Content-Type", "application/json"
+// Результат
+// "Content-Type", "application/json"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -134,6 +182,8 @@ func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *h
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	ctx := r.Context()
 
 	mtrkJSON := model.MetricaJSONAdapter{}
 	err := json.NewDecoder(r.Body).Decode(&mtrkJSON)
@@ -150,7 +200,7 @@ func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *h
 		return
 	}
 
-	err = hc.tcl.UpdateMetrica(mtrk)
+	err = hc.tcl.UpdateMetrica(ctx, mtrk)
 	if err != nil {
 		logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricaJSONHandler ошибка при обновлении метрики %s : %s", mtrk, err.Error()))
 		w.WriteHeader(http.StatusBadRequest)
@@ -164,7 +214,15 @@ func (hc *HandlerContainer) UpdateMetricaJSONHandler(w http.ResponseWriter, r *h
 
 }
 
-// Получение значения метрики через json
+// GetMetricaJSONHandler - Handler по адресу /value/ получения данных о сохраненных метриках в виде JSON
+// Метод Post
+// Обязательные заголовки
+// "Content-Type", "application/json"
+// Результат
+// "Content-Type", "application/json"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) GetMetricaJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
@@ -179,6 +237,8 @@ func (hc *HandlerContainer) GetMetricaJSONHandler(w http.ResponseWriter, r *http
 		return
 	}
 
+	ctx := r.Context()
+
 	mtrkJSON := model.MetricaJSONAdapter{}
 	err := json.NewDecoder(r.Body).Decode(&mtrkJSON)
 	if err != nil {
@@ -187,7 +247,7 @@ func (hc *HandlerContainer) GetMetricaJSONHandler(w http.ResponseWriter, r *http
 		return
 	}
 
-	mtrk, err := hc.tcl.GetMetrica(mtrkJSON.Name, mtrkJSON.Kind)
+	mtrk, err := hc.tcl.GetMetrica(ctx, mtrkJSON.Name, mtrkJSON.Kind)
 
 	if err != nil {
 		logger.Log.Info().Msg(fmt.Sprintf("GetMetricaJSONHandler ошибка при получении метрики %s, %s: %s", mtrkJSON.Name, mtrkJSON.Kind, err.Error()))
@@ -209,12 +269,20 @@ func (hc *HandlerContainer) GetMetricaJSONHandler(w http.ResponseWriter, r *http
 
 }
 
-// Обновление метрик массивом
+// UpdateMetricsJSONHandler - Handler по адресу /updates/ обновление массива метрик заданных в виде JSON
+// Метод Post
+// Обязательные заголовки
+// "Content-Type", "application/json"
+// Результат
+// "Content-Type", "application/json"
+// Ошибки
+// 400 если при обновлении произошла ошибка
+// 405 если метод не Post
 func (hc *HandlerContainer) UpdateMetricsJSONHandler(w http.ResponseWriter, r *http.Request) {
 
 	if r.Method != http.MethodPost {
 		logger.Log.Info().Msg("UpdateMetricsJSONHandler клиент обратился с ошибочным методом в запросе")
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
@@ -223,6 +291,8 @@ func (hc *HandlerContainer) UpdateMetricsJSONHandler(w http.ResponseWriter, r *h
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
+
+	ctx := r.Context()
 
 	mtrksJSON := []model.MetricaJSONAdapter{}
 	err := json.NewDecoder(r.Body).Decode(&mtrksJSON)
@@ -243,7 +313,7 @@ func (hc *HandlerContainer) UpdateMetricsJSONHandler(w http.ResponseWriter, r *h
 		mtrks = append(mtrks, mtrk)
 	}
 
-	err = hc.tcl.UpdateMetricaBatch(mtrks)
+	err = hc.tcl.UpdateMetricaBatch(ctx, mtrks)
 	if err != nil {
 		logger.Log.Info().Msg(fmt.Sprintf("UpdateMetricsJSONHandler ошибка при обновлении метрик: %s", err.Error()))
 		w.WriteHeader(http.StatusBadRequest)

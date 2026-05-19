@@ -9,8 +9,8 @@ import (
 	"net/http"
 )
 
-// Райтер, встраивание
 type HMACSignWriter struct {
+	// Райтер, встраивание
 	http.ResponseWriter
 	key []byte
 }
@@ -29,6 +29,7 @@ func (sgnw *HMACSignWriter) Write(msg []byte) (int, error) {
 	return sgnw.ResponseWriter.Write(msg)
 }
 
+// HMACSignMiddleware - Middleware-фунция проверяющая хеш тела http запроса переданного в заголовке HashSHA256
 func HMACSignMiddleware(key string) func(http.Handler) http.Handler {
 
 	secret := []byte(key)

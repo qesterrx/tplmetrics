@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 	"time"
 
@@ -14,12 +13,21 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/service"
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
+
+	_ "net/http/pprof"
 )
 
 func main() {
+
+	// Запускаем HTTP сервер для pprof
+	go func() {
+		http.ListenAndServe("localhost:6060", nil)
+	}()
+
 	if err := run(); err != nil {
 		panic(err)
 	}
@@ -50,18 +58,16 @@ func run() error {
 	//Объект с хендлерами
 	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign)
 
-	var wg sync.WaitGroup
+	g, ctx := errgroup.WithContext(ctx)
 
 	//На самом деле этот кусочек имеет смысл только если у storage есть куда сохранять данные
 	//А вообще конечно передаю привет тому извращенцу который придумал эту логику, а так же наставикам курса которые не могут сказать как это предпологалось сделать
 	if cfg.StorageMode == config.MetricaStorageModeAsync {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		g.Go(func() error {
 			logger.Log.Debug().Msg("Запуск TickerWriteMetrics")
 			tcl.TickerWriteMetrics(ctx)
-			cancel()
-		}()
+			return nil
+		})
 	}
 
 	server := &http.Server{
@@ -72,17 +78,16 @@ func run() error {
 		IdleTimeout:  10 * time.Second, // Таймаут для keep-alive соединений
 	}
 
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	g.Go(func() error {
 		logger.Log.Debug().Msg("Запуск HttpServer")
 		err := server.ListenAndServe()
 		if ctx.Err() == nil {
 			//Ошибку отображаем только если контекст не завершен
 			logger.Log.Error().Msg("Ошибка в работе сервера ListenAndServe:" + err.Error())
+			return err
 		}
-		cancel()
-	}()
+		return nil
+	})
 
 	// Канал для сигналов ОС
 	sigChan := make(chan os.Signal, 1)
@@ -101,7 +106,6 @@ func run() error {
 	}
 
 	logger.Log.Info().Msg("Сервер HttpServer остановлен")
-	wg.Wait()
 
 	return nil
 }

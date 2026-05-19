@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,12 +69,13 @@ func TestGetAllCurrentMetricsHandler(t *testing.T) {
 func TestGetMetricaHandler(t *testing.T) {
 
 	tcl, router := GetRouterForTest()
+	ctx := context.Background()
 
-	tcl.UpdateMetrica(model.NewMetricaCounter("c1", 5))
-	tcl.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
+	tcl.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 5))
+	tcl.UpdateMetrica(ctx, model.NewMetricaGauge("g1", 5.05005))
 
-	valC, _ := tcl.GetMetrica("c1", string(model.Counter))
-	valG, _ := tcl.GetMetrica("g1", string(model.Gauge))
+	valC, _ := tcl.GetMetrica(ctx, "c1", string(model.Counter))
+	valG, _ := tcl.GetMetrica(ctx, "g1", string(model.Gauge))
 
 	tests := []struct {
 		name       string
@@ -261,9 +263,10 @@ func TestUpdateMetricaJSONHandler(t *testing.T) {
 func TestGetMetricaJSONHandler(t *testing.T) {
 
 	tcl, router := GetRouterForTest()
+	ctx := context.Background()
 
-	tcl.UpdateMetrica(model.NewMetricaCounter("c1", 5))
-	tcl.UpdateMetrica(model.NewMetricaGauge("g1", 5.05005))
+	tcl.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 5))
+	tcl.UpdateMetrica(ctx, model.NewMetricaGauge("g1", 5.05005))
 
 	reqCounter := `{"id":"c1","type":"counter"}`
 	reqGauge := `{"id":"g1","type":"gauge"}`

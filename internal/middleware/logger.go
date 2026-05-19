@@ -1,3 +1,5 @@
+// Пакет middleware содержит в себе Middleware-фунции сервера.
+// Данные функции расширяют функционал без необходимости доработки хендлеров.
 package middleware
 
 import (
@@ -25,6 +27,15 @@ func (lrw *logResponseWriter) WriteHeader(statusCode int) {
 	lrw.statusCode = statusCode
 }
 
+// LoggingMiddleware - Middleware-фунция логирования http запросов
+// Уровень логирования задан Info
+// Отображает:
+// URI - какой адрес вызывается
+// method - метод обращения
+// duration - длительность выполнения
+// code - код результата оброботки
+// size request - размер запроса (в байтах)
+// size response - размер ответа (в байтах)
 func LoggingMiddleware(h http.Handler) http.Handler {
 	loggedHandler := func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
