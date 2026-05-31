@@ -12,6 +12,8 @@ func FormatMetricaGauge(value float64) string {
 }
 
 // MetricaGauge - структура для хранения Gauge метрики
+//
+// generate:reset
 type MetricaGauge struct {
 	name     string
 	kind     KindValue

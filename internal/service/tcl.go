@@ -47,6 +47,8 @@ type UpdateMetricaSubscriber interface {
 }
 
 // TCLService - Структура объекта содержащего сервисный слой обработчиков
+//
+// generate:reset
 type TCLService struct {
 	config  *config.ConfigServer
 	storage MetricaStorage
