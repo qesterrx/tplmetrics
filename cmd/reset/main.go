@@ -104,18 +104,6 @@ func processFile(filename string) (string, string, error) {
 
 func createResetMethod(src *strings.Builder, structName string, structFields []*ast.Field) error {
 
-	//	   rs.i = 0
-	//	   rs.str = ""
-	//	   if rs.strP != nil {
-	//	       *rs.strP = ""
-	//	   }
-	//	   rs.s = rs.s[:0]
-	//	   clear(rs.m)
-	//	   if resetter, ok := rs.child.(interface{ Reset() }); ok && rs.child != nil {
-	//	       resetter.Reset()
-	//	   }
-	//	}
-
 	fmt.Fprintf(src, "\n")
 	fmt.Fprintf(src, "func (rs *%s) Reset() {", structName)
 	fmt.Fprintf(src, "if rs == nil {return}")
