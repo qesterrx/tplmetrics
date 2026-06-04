@@ -11,6 +11,8 @@ func FormatMetricaCounter(value int64) string {
 }
 
 // MetricaCounter - структура для хранения Counter метрики
+//
+// generate:reset
 type MetricaCounter struct {
 	name     string
 	kind     KindValue

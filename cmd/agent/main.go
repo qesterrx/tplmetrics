@@ -15,7 +15,23 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+var buildVersion string
+var buildDate string
+var buildCommit string
+
 func main() {
+
+	nvl := func(str string) string {
+		if str == "" {
+			return "N/A"
+		}
+		return str
+	}
+
+	fmt.Println("Build version:", nvl(buildVersion))
+	fmt.Println("Build date:", nvl(buildDate))
+	fmt.Println("Build commit:", nvl(buildCommit))
+
 	logger.InitLogger()
 	zerolog.SetGlobalLevel(zerolog.DebugLevel) //Этот левел для меня )
 

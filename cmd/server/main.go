@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,7 +22,22 @@ import (
 	_ "net/http/pprof"
 )
 
+var buildVersion string
+var buildDate string
+var buildCommit string
+
 func main() {
+
+	nvl := func(str string) string {
+		if str == "" {
+			return "N/A"
+		}
+		return str
+	}
+
+	fmt.Println("Build version:", nvl(buildVersion))
+	fmt.Println("Build date:", nvl(buildDate))
+	fmt.Println("Build commit:", nvl(buildCommit))
 
 	// Запускаем HTTP сервер для pprof
 	go func() {
