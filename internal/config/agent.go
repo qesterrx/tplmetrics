@@ -2,10 +2,14 @@
 package config
 
 import (
-	"flag"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"os"
 	"strconv"
+
+	"github.com/jessevdk/go-flags"
 )
 
 // ConfigAgent структура для хранения конфигурации клиента, содержит следующие поля
@@ -13,31 +17,31 @@ import (
 // PoolInterval Интервал опроса метрик, задается параметром "p" или переменной окружения POLL_INTERVAL
 // ReportInterval Интервал отправки метрик на сервер, задается параметром "r" или переменной окружения REPORT_INTERVAL
 // RateLimit - Количество горутин, отправляющий данные на сервер, задается параметром "l" или переменной окружения RATE_LIMIT
+// CryptoKey Задает путь к публичному ключу для шифрования сообщений от агента
 // SecretKeyForSign Ключ для HMAC шифрования сообщения перед отправкой, задается параметром "k" или переменной окружения KEY
 type ConfigAgent struct {
-	ServerHost       NetAddress
-	PoolInterval     int
-	ReportInterval   int
-	RateLimit        int
-	SecretKeyForSign string
+	ServerHost       NetAddress `short:"a" long:"address" description:"Endpoint for server. Format host:port" default:"localhost:8080"`
+	PoolInterval     int        `short:"p" long:"pool" description:"PoolInterval - time in sec after which collecting mertic (>=1)" default:"2"`
+	ReportInterval   int        `short:"r" long:"report" description:"ReportInterval - time in sec after which sending to server (>=1)" default:"10"`
+	RateLimit        int        `short:"l" long:"rate" description:"RateLimit - count of clients for send metric (>=1)" default:"1"`
+	SecretKeyForSign string     `short:"k" long:"secret" description:"SecretKeyForSign - key for sign data in header HashSHA256" default:""`
+	CryptoKey        string     `long:"crypto-key" description:"Filename public key for RSA" default:""`
+	PublicKeyRSA     *x509.Certificate
 }
 
 // ParseParamsAgent - Процедура создания структуры ConfigAgent на основе параметров командной строки и переменных окружения
 func ParseParamsAgent() (*ConfigAgent, error) {
 
-	fs := flag.NewFlagSet("", flag.PanicOnError)
-
 	var cfg ConfigAgent
 
-	cfg.ServerHost = NetAddress{Host: "localhost", Port: 8080}
-	fs.Var(&cfg.ServerHost, "a", "Server's endpoint. Format host:port")
+	// Создаем парсер (аналог FlagSet)
+	parser := flags.NewParser(&cfg, flags.Default)
 
-	fs.IntVar(&cfg.PoolInterval, "p", 2, "PoolInterval - time in sec after which collecting mertic (>=1)")
-	fs.IntVar(&cfg.RateLimit, "l", 1, "RateLimit - count of clients for send metric (>=1)")
-	fs.IntVar(&cfg.ReportInterval, "r", 10, "ReportInterval - time in sec after which sending to server (>=1)")
-	fs.StringVar(&cfg.SecretKeyForSign, "k", "", "SecretKeyForSign - key for sign data in header HashSHA256")
-
-	fs.Parse(os.Args[1:])
+	// Парсим аргументы
+	_, err := parser.ParseArgs(os.Args[1:])
+	if err != nil {
+		return nil, err
+	}
 
 	//Переопределим параметрами из ENV
 	if envServerHost, exists := os.LookupEnv("ADDRESS"); exists && envServerHost != "" {
@@ -78,6 +82,10 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.SecretKeyForSign = envKey
 	}
 
+	if envCryptoKey, exists := os.LookupEnv("CRYPTO_KEY"); exists && envCryptoKey != "" {
+		cfg.CryptoKey = envCryptoKey
+	}
+
 	//Дополнительные проверки параметров
 	if cfg.PoolInterval < 1 {
 		return nil, fmt.Errorf("PoolInterval can't be less 1, got %d, check flag -p and ENV $POLL_INTERVAL", cfg.PoolInterval)
@@ -92,4 +100,36 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	}
 
 	return &cfg, nil
+}
+
+func (cfg *ConfigAgent) LoadPublicKey() error {
+	if cfg.CryptoKey == "" {
+		return nil
+	}
+
+	certFile, err := os.ReadFile(cfg.CryptoKey)
+	if err != nil {
+		return fmt.Errorf("Ошибка чтения файла %s: %v", cfg.CryptoKey, err)
+	}
+
+	certBlock, _ := pem.Decode(certFile)
+	if certBlock == nil {
+		return fmt.Errorf("Сертификат не найден в %s: %v", cfg.CryptoKey, err)
+	}
+
+	cert, err := x509.ParseCertificate(certBlock.Bytes)
+	if err != nil {
+		return err
+	}
+
+	//Разборки со слишком длинным сообщением
+	key := cert.PublicKey.(*rsa.PublicKey)
+	bits := key.N.BitLen()
+	bytes := key.N.BitLen() / 8
+
+	fmt.Printf("Key size: %d bits (%d bytes)\n", bits, bytes)
+	fmt.Printf("Max message size: %d bytes\n", bytes-2*32-2)
+
+	cfg.PublicKeyRSA = cert
+	return nil
 }

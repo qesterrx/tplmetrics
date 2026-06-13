@@ -6,7 +6,10 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/hmac"
+	cryptorand "crypto/rand"
+	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -21,7 +24,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
-	"github.com/qesterrx/tplmetrics/internal/retry"
+	"github.com/qesterrx/tplmetrics/pkg/retry"
 
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
@@ -230,7 +233,7 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- [
 // В данной процедуре используется resty клиент, и дополнительно заданы middleware функции
 // GzipCompressMiddleware
 // HMACSignMiddleware
-func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string) {
+func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string, PublicKeyRSA *x509.Certificate) {
 	logger.Log.Debug().Msg("Запуск Sender")
 
 	//Клиента создаем один раз
@@ -238,6 +241,10 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 
 	//Тут определим middleware агента
 	client.OnBeforeRequest(GzipCompressMiddleware) //Сначала зипуем
+	//TODO вообще если не зиповать то выходит ошибка RSA crypto/rsa: message too long for RSA key size
+	if PublicKeyRSA != nil {
+		client.OnBeforeRequest(RSAEncrypt(PublicKeyRSA)) //Затем RSA
+	}
 	if secretKeyForSign != "" {
 		client.OnBeforeRequest(HMACSignMiddleware(secretKeyForSign)) //Затем подписываем
 	}
@@ -359,6 +366,39 @@ func HMACSignMiddleware(key string) resty.RequestMiddleware {
 		}
 
 		return nil
+	}
+
+}
+
+// RSAEncrypt - Шифрование с помощью RSA тела запроса
+func RSAEncrypt(PublicKeyRSA *x509.Certificate) resty.RequestMiddleware {
+
+	return func(c *resty.Client, r *resty.Request) error {
+		if r.Body != nil {
+
+			//r.Body это интерфейс, очередной type assertion
+			var srcBody []byte
+			switch tmp := r.Body.(type) {
+			case string:
+				srcBody = []byte(tmp)
+			case []byte:
+				srcBody = tmp
+			default:
+				//Если тело не то что мы предпологали то просто ничего не делаем
+				return nil
+			}
+
+			encryptedBody, err := rsa.EncryptOAEP(sha256.New(), cryptorand.Reader, PublicKeyRSA.PublicKey.(*rsa.PublicKey), srcBody, []byte{})
+			if err != nil {
+				return fmt.Errorf("sender ошибка шифрования RSA %w", err)
+			}
+
+			r.SetBody(encryptedBody)
+
+		}
+
+		return nil
+
 	}
 
 }

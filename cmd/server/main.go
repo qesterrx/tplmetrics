@@ -13,6 +13,7 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/service"
+	"github.com/qesterrx/tplmetrics/pkg/defval"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
@@ -28,16 +29,9 @@ var buildCommit string
 
 func main() {
 
-	nvl := func(str string) string {
-		if str == "" {
-			return "N/A"
-		}
-		return str
-	}
-
-	fmt.Println("Build version:", nvl(buildVersion))
-	fmt.Println("Build date:", nvl(buildDate))
-	fmt.Println("Build commit:", nvl(buildCommit))
+	fmt.Println("Build version:", defval.DVR(buildVersion, "N/A"))
+	fmt.Println("Build date:", defval.DVR(buildDate, "N/A"))
+	fmt.Println("Build commit:", defval.DVR(buildCommit, "N/A"))
 
 	// Запускаем HTTP сервер для pprof
 	go func() {
@@ -64,6 +58,13 @@ func run() error {
 		return err
 	}
 
+	//Загружаем приватный ключ
+	err = cfg.LoadPrivateKey()
+	if err != nil {
+		logger.Log.Error().Err(err)
+		return err
+	}
+
 	//Сервис
 	tcl, err := service.NewTCLService(cfg)
 	if err != nil {
@@ -72,7 +73,7 @@ func run() error {
 	}
 
 	//Объект с хендлерами
-	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign)
+	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign, cfg.PrivateKeyRSA)
 
 	g, ctx := errgroup.WithContext(ctx)
 

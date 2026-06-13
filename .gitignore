@@ -29,3 +29,6 @@ vendor/
 notes.txt
 
 TempFileStorage
+
+#certificates
+*.pem
