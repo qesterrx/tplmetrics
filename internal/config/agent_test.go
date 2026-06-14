@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -10,10 +11,32 @@ import (
 func TestParseParamsAgent(t *testing.T) {
 	app := os.Args[0]
 
+	//Создаем временный файл с json настройками
+	jsonConfig := configAgentJSON{
+		ServerHost:       func() *string { s := "localhost:8091"; return &s }(),
+		PoolInterval:     func() *int { i := 11; return &i }(),
+		ReportInterval:   func() *int { i := 12; return &i }(),
+		RateLimit:        func() *int { i := 13; return &i }(),
+		SecretKeyForSign: func() *string { s := "json"; return &s }(),
+		CryptoKey:        func() *string { s := "json"; return &s }(),
+	}
+
+	data, err := json.Marshal(&jsonConfig)
+	assert.NoError(t, err)
+	file, err := os.CreateTemp(".", "tmp_config.json")
+	assert.NoError(t, err)
+	_, err = file.Write(data)
+	assert.NoError(t, err)
+	file.Close()
+
+	// удалить файл после использования
+	defer os.Remove(file.Name())
+
 	tests := []struct {
 		name     string
 		flagset  []string
 		envset   map[string]string
+		jsoncfg  string
 		expected ConfigAgent
 		err      bool //Сокращенный вариант, не стал добавлять сюда все переменные, мне главное проверить ошибки
 	}{
@@ -28,6 +51,37 @@ func TestParseParamsAgent(t *testing.T) {
 				SecretKeyForSign: "",
 				RateLimit:        1,
 				CryptoKey:        "",
+			},
+			err: false,
+		},
+		{
+			name:    "json flag",
+			flagset: []string{"-c=" + file.Name()},
+			envset:  nil,
+			expected: ConfigAgent{
+				ServerHost:       NetAddress{Host: "localhost", Port: 8091},
+				PoolInterval:     11,
+				ReportInterval:   12,
+				SecretKeyForSign: "json",
+				RateLimit:        13,
+				CryptoKey:        "json",
+				Config:           file.Name(),
+			},
+			err: false,
+		},
+		{
+			name:    "json ENV",
+			flagset: nil,
+			envset: map[string]string{
+				"CONFIG": file.Name()},
+			expected: ConfigAgent{
+				ServerHost:       NetAddress{Host: "localhost", Port: 8091},
+				PoolInterval:     11,
+				ReportInterval:   12,
+				SecretKeyForSign: "json",
+				RateLimit:        13,
+				CryptoKey:        "json",
+				Config:           file.Name(),
 			},
 			err: false,
 		},

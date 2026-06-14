@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi v1.5.5
 	github.com/go-resty/resty/v2 v2.17.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
+	github.com/golang/mock v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/rs/zerolog v1.34.0

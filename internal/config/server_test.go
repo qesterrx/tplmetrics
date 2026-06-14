@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -9,6 +10,30 @@ import (
 
 func TestParseParamsServer(t *testing.T) {
 	app := os.Args[0]
+
+	//Создаем временный файл с json настройками
+	jsonConfig := configServerJSON{
+		ServerHost:             func() *string { s := "localhost:8091"; return &s }(),
+		StoreInterval:          func() *int { i := 11; return &i }(),
+		FileStorageName:        func() *string { s := "json_1"; return &s }(),
+		RestoreFromFileStorage: func() *bool { b := true; return &b }(),
+		DatabaseDSN:            func() *string { s := "postgres://pgs/pgs?sslmode=pgs"; return &s }(),
+		SecretKeyForSign:       func() *string { s := "json_3"; return &s }(),
+		AuditFile:              func() *string { s := "json_4"; return &s }(),
+		AuditURL:               func() *string { s := "json_5"; return &s }(),
+		CryptoKey:              func() *string { s := "json_6"; return &s }(),
+	}
+
+	data, err := json.Marshal(&jsonConfig)
+	assert.NoError(t, err)
+	file, err := os.CreateTemp(".", "tmp_config.json")
+	assert.NoError(t, err)
+	_, err = file.Write(data)
+	assert.NoError(t, err)
+	file.Close()
+
+	// удалить файл после использования
+	defer os.Remove(file.Name())
 
 	tests := []struct {
 		name     string
@@ -31,6 +56,45 @@ func TestParseParamsServer(t *testing.T) {
 				AuditURL:               "",
 				CryptoKey:              "",
 				SecretKeyForSign:       "",
+			},
+			err: false,
+		},
+		{
+			name:    "json flag",
+			flagset: []string{"-c=" + file.Name()},
+			envset:  nil,
+			expected: ConfigServer{
+				ServerHost:             NetAddress{Host: "localhost", Port: 8091},
+				StoreInterval:          11,
+				FileStorageName:        "json_1",
+				RestoreFromFileStorage: true,
+				StorageMode:            MetricaStorageModeAsync,
+				DatabaseDSN:            "postgres://pgs/pgs?sslmode=pgs",
+				AuditFile:              "json_4",
+				AuditURL:               "json_5",
+				CryptoKey:              "json_6",
+				SecretKeyForSign:       "json_3",
+				Config:                 file.Name(),
+			},
+			err: false,
+		},
+		{
+			name:    "json ENV",
+			flagset: nil,
+			envset: map[string]string{
+				"CONFIG": file.Name()},
+			expected: ConfigServer{
+				ServerHost:             NetAddress{Host: "localhost", Port: 8091},
+				StoreInterval:          11,
+				FileStorageName:        "json_1",
+				RestoreFromFileStorage: true,
+				StorageMode:            MetricaStorageModeAsync,
+				DatabaseDSN:            "postgres://pgs/pgs?sslmode=pgs",
+				AuditFile:              "json_4",
+				AuditURL:               "json_5",
+				CryptoKey:              "json_6",
+				SecretKeyForSign:       "json_3",
+				Config:                 file.Name(),
 			},
 			err: false,
 		},

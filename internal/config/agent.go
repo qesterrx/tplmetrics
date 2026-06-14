@@ -4,6 +4,7 @@ package config
 import (
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"os"
@@ -16,9 +17,11 @@ import (
 // ServerHost Адрес клиента, задается параметром "a" или переменной окружения ADDRESS
 // PoolInterval Интервал опроса метрик, задается параметром "p" или переменной окружения POLL_INTERVAL
 // ReportInterval Интервал отправки метрик на сервер, задается параметром "r" или переменной окружения REPORT_INTERVAL
-// RateLimit - Количество горутин, отправляющий данные на сервер, задается параметром "l" или переменной окружения RATE_LIMIT
+// RateLimit Количество горутин, отправляющий данные на сервер, задается параметром "l" или переменной окружения RATE_LIMIT
 // CryptoKey Задает путь к публичному ключу для шифрования сообщений от агента
 // SecretKeyForSign Ключ для HMAC шифрования сообщения перед отправкой, задается параметром "k" или переменной окружения KEY
+// Config Имя JSON файла с параметрами приложения
+// PublicKeyRSA публичный ключ шифрования
 type ConfigAgent struct {
 	ServerHost       NetAddress `short:"a" long:"address" description:"Endpoint for server. Format host:port" default:"localhost:8080"`
 	PoolInterval     int        `short:"p" long:"pool" description:"PoolInterval - time in sec after which collecting mertic (>=1)" default:"2"`
@@ -26,7 +29,18 @@ type ConfigAgent struct {
 	RateLimit        int        `short:"l" long:"rate" description:"RateLimit - count of clients for send metric (>=1)" default:"1"`
 	SecretKeyForSign string     `short:"k" long:"secret" description:"SecretKeyForSign - key for sign data in header HashSHA256" default:""`
 	CryptoKey        string     `long:"crypto-key" description:"Filename public key for RSA" default:""`
+	Config           string     `short:"c" long:"config" description:"Filename with json config" default:""`
 	PublicKeyRSA     *x509.Certificate
+}
+
+// структура для загрузки параметров из JSON
+type configAgentJSON struct {
+	ServerHost       *string `json:"address,omitempty"`
+	PoolInterval     *int    `json:"poll_interval,omitempty"`
+	ReportInterval   *int    `json:"report_interval,omitempty"`
+	RateLimit        *int    `json:"rate_limit,omitempty"`
+	SecretKeyForSign *string `json:"secret,omitempty"`
+	CryptoKey        *string `json:"crypto_key,omitempty"`
 }
 
 // ParseParamsAgent - Процедура создания структуры ConfigAgent на основе параметров командной строки и переменных окружения
@@ -41,6 +55,17 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	_, err := parser.ParseArgs(os.Args[1:])
 	if err != nil {
 		return nil, err
+	}
+
+	//Проверяем переменную для загрузки конфигурации из JSON
+	if envConfig, exists := os.LookupEnv("CONFIG"); exists && envConfig != "" {
+		cfg.Config = envConfig
+	}
+
+	//Доопределим конфигурацию из JSON файла
+	err = cfg.redefineFromJSON(parser)
+	if err != nil {
+		return nil, fmt.Errorf("JSON Config: %v", err.Error())
 	}
 
 	//Переопределим параметрами из ENV
@@ -102,6 +127,7 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 	return &cfg, nil
 }
 
+// LoadPublicKey - функиця загрузки публичного ключа для RSA шифрования обращений к серверу
 func (cfg *ConfigAgent) LoadPublicKey() error {
 	if cfg.CryptoKey == "" {
 		return nil
@@ -131,5 +157,68 @@ func (cfg *ConfigAgent) LoadPublicKey() error {
 	fmt.Printf("Max message size: %d bytes\n", bytes-2*32-2)
 
 	cfg.PublicKeyRSA = cert
+	return nil
+}
+
+// RedefineFromJSON - доопределение параметров из JSON файла, типичный способ как сделать простое и понятное сложным и непонятным. За это программисты и получают свои 100500К/наносекунду
+func (cfg *ConfigAgent) redefineFromJSON(parser *flags.Parser) error {
+
+	if cfg.Config != "" {
+
+		data, err := os.ReadFile(cfg.Config)
+		if err != nil {
+			return err
+		}
+
+		if len(data) > 0 {
+
+			cfgJSON := configAgentJSON{}
+
+			err = json.Unmarshal(data, &cfgJSON)
+			if err != nil {
+				return err
+			}
+
+			// Для наименьшего приоритета надо переопределить только те параметры которые были не заданы аргументами
+
+			opt := parser.FindOptionByLongName("address")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.ServerHost != nil {
+				newServerHost := NetAddress{}
+				err := newServerHost.Set(*cfgJSON.ServerHost)
+				if err != nil {
+					return fmt.Errorf("JSON CONFIG address has wrong format: %v", err.Error())
+				} else {
+					cfg.ServerHost = newServerHost
+				}
+			}
+
+			opt = parser.FindOptionByLongName("pool")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.PoolInterval != nil {
+				cfg.PoolInterval = *cfgJSON.PoolInterval
+			}
+
+			opt = parser.FindOptionByLongName("report")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.ReportInterval != nil {
+				cfg.ReportInterval = *cfgJSON.ReportInterval
+			}
+
+			opt = parser.FindOptionByLongName("rate")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.RateLimit != nil {
+				cfg.RateLimit = *cfgJSON.RateLimit
+			}
+
+			opt = parser.FindOptionByLongName("secret")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.SecretKeyForSign != nil {
+				cfg.SecretKeyForSign = *cfgJSON.SecretKeyForSign
+			}
+
+			opt = parser.FindOptionByLongName("crypto-key")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.CryptoKey != nil {
+				cfg.CryptoKey = *cfgJSON.CryptoKey
+			}
+
+		}
+
+	}
 	return nil
 }

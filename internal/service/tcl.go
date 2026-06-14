@@ -16,6 +16,8 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
 
+//mockgen -source=./internal/service/tcl.go -destination=./internal/service/mocks/mock_storage.go -package=mocks MetricaStorage
+
 // MetricaStorage - Интерфейс описывающий методы для работы с долговременным хранилищем данных
 type MetricaStorage interface {
 

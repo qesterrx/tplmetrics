@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"fmt"
 	"io"
 	"net/http"
 )
@@ -16,7 +15,7 @@ func RSADecrypt(privateKeyPem *rsa.PrivateKey) func(http.Handler) http.Handler {
 		funcRSADecrypt := func(w http.ResponseWriter, r *http.Request) {
 
 			contentLength := r.Header.Get("Content-Length")
-			fmt.Println(">>>>>>>>>>>>>>>contentLength=", contentLength)
+
 			if contentLength != "0" && contentLength != "" {
 
 				//Чиатем тело
