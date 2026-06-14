@@ -64,6 +64,8 @@ func RunAgent(config *config.ConfigAgent) {
 	//Репортер берет метрики из queueToGroup, группирует, сериализует и пытается отправить
 	wg.Go(func() {
 		agent.Reporter(ctx, queueToGroup, queueToSend, config.ReportInterval)
+		//Надо закрыть канал, чтобы отправщики могли остановиться
+		close(queueToSend)
 	})
 
 	//Пул сендеров занимается отправкой
@@ -75,10 +77,12 @@ func RunAgent(config *config.ConfigAgent) {
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	<-sigChan
 	cancel()
+
 	logger.Log.Debug().Msg("Ожидание завершения программы")
+	wg.Wait()
 
 }

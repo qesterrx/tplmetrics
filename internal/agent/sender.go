@@ -46,8 +46,11 @@ func checkRetryRequest(err error) bool {
 // GzipCompressMiddleware
 // HMACSignMiddleware
 func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string, PublicKeyRSA *x509.Certificate) {
-	logger.Log.Debug().Msg("Запуск Sender")
 
+	//??? вот тут с-порно, если бы этот контекст использовался бы Resty то логично, а тут он прокидывается в Retry и по факту используется там только для того чтобы отменить retry
+	//ctxSend := context.WithoutCancel(ctx)
+
+	logger.Log.Debug().Msg("Запуск Sender" + strconv.Itoa(num))
 	//Клиента создаем один раз
 	client := resty.New()
 
@@ -65,8 +68,22 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 		select {
 		case <-ctx.Done():
 			//Если получили сигнал завершения останавливаемся
-			logger.Log.Debug().Msg("Остановка Sender по контексту")
+			logger.Log.Debug().Msg("Остановка Sender " + strconv.Itoa(num) + " по контексту, ожидается завершение процесса")
+
+			//Reporter может еще что-то дописывать в канал, ждем закрытия канала
+			for msg := range toSend {
+				err := Send(ctx, client, url, msg)
+
+				if err != nil {
+					logger.Log.Error().Msg(err.Error())
+				} else {
+					logger.Log.Debug().Msg("Метрики отправлены [Sender " + strconv.Itoa(num) + "]")
+				}
+			}
+
+			logger.Log.Debug().Msg("Sender " + strconv.Itoa(num) + " завершил работу, остановлен по контексту")
 			return
+
 		case msg := <-toSend:
 			err := Send(ctx, client, url, msg)
 

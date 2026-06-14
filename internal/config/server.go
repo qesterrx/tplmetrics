@@ -224,12 +224,13 @@ func (cfg *ConfigServer) redefineFromJSON(parser *flags.Parser) error {
 				}
 			}
 
-			opt = parser.FindOptionByLongName("store_interval")
-			if (opt == nil || opt.IsSetDefault()) && cfgJSON.StoreInterval != nil {
+			opt = parser.FindOptionByLongName("store-interval")
+			if ((opt == nil) || (opt.IsSetDefault())) && cfgJSON.StoreInterval != nil {
+				fmt.Println("store_interval from json")
 				cfg.StoreInterval = *cfgJSON.StoreInterval
 			}
 
-			opt = parser.FindOptionByLongName("store_file")
+			opt = parser.FindOptionByLongName("file-storage")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.FileStorageName != nil {
 				cfg.FileStorageName = *cfgJSON.FileStorageName
 			}
@@ -239,27 +240,27 @@ func (cfg *ConfigServer) redefineFromJSON(parser *flags.Parser) error {
 				cfg.RestoreFromFileStorage = *cfgJSON.RestoreFromFileStorage
 			}
 
-			opt = parser.FindOptionByLongName("database_dsn")
+			opt = parser.FindOptionByLongName("database-dsn")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.DatabaseDSN != nil {
 				cfg.DatabaseDSN = *cfgJSON.DatabaseDSN
 			}
 
-			opt = parser.FindOptionByLongName("secret_key")
+			opt = parser.FindOptionByLongName("secret-key")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.SecretKeyForSign != nil {
 				cfg.SecretKeyForSign = *cfgJSON.SecretKeyForSign
 			}
 
-			opt = parser.FindOptionByLongName("audit_file")
+			opt = parser.FindOptionByLongName("audit-file")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.AuditFile != nil {
 				cfg.AuditFile = *cfgJSON.AuditFile
 			}
 
-			opt = parser.FindOptionByLongName("audit_url")
+			opt = parser.FindOptionByLongName("audit-url")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.AuditURL != nil {
 				cfg.AuditURL = *cfgJSON.AuditURL
 			}
 
-			opt = parser.FindOptionByLongName("crypto_key")
+			opt = parser.FindOptionByLongName("crypto-key")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.CryptoKey != nil {
 				cfg.CryptoKey = *cfgJSON.CryptoKey
 			}

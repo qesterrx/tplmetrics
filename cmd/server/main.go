@@ -108,11 +108,16 @@ func run() error {
 
 	// Канал для сигналов ОС
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Ждем сигнал завершения
-	<-sigChan
-	cancel()
+	select {
+	case <-sigChan:
+		fmt.Println("Получен сигнал остановки приложения")
+		cancel()
+	case <-ctx.Done():
+		fmt.Println("Экстренная остановка приложения")
+	}
 
 	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
@@ -123,6 +128,7 @@ func run() error {
 	}
 
 	logger.Log.Info().Msg("Сервер HttpServer остановлен")
+	g.Wait()
 
 	return nil
 }

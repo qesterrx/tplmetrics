@@ -20,12 +20,16 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- [
 	//в данной структуре будем группировать данные из очереди, кроме того с помощью нее обеспечим транзакционность
 	groupMap := map[string]model.Metrica{}
 
+	stopped := false
+
 	for {
 		select {
 		case <-ctx.Done():
-			//Если получили сигнал завершения останавливаемся
-			logger.Log.Debug().Msg("Остановка Reporter по контексту")
-			return
+			if !stopped {
+				//Если получили сигнал завершения останавливаемся
+				logger.Log.Debug().Msg("Остановка Reporter по контексту, ожидается завершение процесса")
+				stopped = true
+			}
 		case <-ticker.C:
 
 			logger.Log.Debug().Msg("Reporter запуск группировки данных из очереди toGroup")
@@ -33,10 +37,6 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- [
 		loop:
 			for {
 				select {
-				case <-ctx.Done():
-					//Если получили сигнал завершения останавливаемся
-					logger.Log.Debug().Msg("Остановка Reporter по контексту")
-					return
 				case metrica := <-toGroup:
 					//Группировка
 					switch metrica.Kind() {
@@ -82,6 +82,12 @@ func Reporter(ctx context.Context, toGroup <-chan model.Metrica, toSend chan<- [
 
 			//... и каков ответ на главный вопрос жизни, вселенной и всего такого
 			groupMap = map[string]model.Metrica{}
+
+			//Выход из горутины только после того как все было сгруппировано и доотправлено
+			if stopped {
+				logger.Log.Debug().Msg("Reporter завершил работу, остановлен по контексту")
+				return
+			}
 
 		}
 	}
