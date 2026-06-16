@@ -5,8 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"encoding/base64"
 	"io"
 	"net/http"
+
+	"github.com/qesterrx/tplmetrics/pkg/aes"
 )
 
 func RSADecrypt(privateKeyPem *rsa.PrivateKey) func(http.Handler) http.Handler {
@@ -15,8 +18,22 @@ func RSADecrypt(privateKeyPem *rsa.PrivateKey) func(http.Handler) http.Handler {
 		funcRSADecrypt := func(w http.ResponseWriter, r *http.Request) {
 
 			contentLength := r.Header.Get("Content-Length")
+			encryptedAESKeyString := r.Header.Get("AES")
 
-			if contentLength != "0" && contentLength != "" {
+			if contentLength != "0" && contentLength != "" && encryptedAESKeyString != "" {
+
+				encryptedAESKey, err := base64.StdEncoding.DecodeString(encryptedAESKeyString)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+
+				//Расшифровываем секретным ключем
+				decryptedAESKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKeyPem, encryptedAESKey, []byte{})
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
 
 				//Чиатем тело
 				body, err := io.ReadAll(r.Body)
@@ -26,11 +43,11 @@ func RSADecrypt(privateKeyPem *rsa.PrivateKey) func(http.Handler) http.Handler {
 				}
 				r.Body.Close()
 
-				//Расшифровываем секретным ключем
-				decryptedBody, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKeyPem, body, []byte{})
+				//Расшифровываем тело
+				decryptedBody, err := aes.DecryptGCM(body, decryptedAESKey)
 				if err != nil {
 					w.WriteHeader(http.StatusBadRequest)
-					//return
+					return
 				}
 
 				//Восстанавливаем для дальнейшей работы

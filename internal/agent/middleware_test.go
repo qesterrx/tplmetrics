@@ -9,9 +9,11 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/qesterrx/tplmetrics/pkg/aes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -147,9 +149,12 @@ func TestRSAEncrypt(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name:        "encrypt string body",
-			body:        `{"test": "data"}`,
-			expectError: false,
+			name: "encrypt short body",
+			body: `{"test": "data"}`,
+		},
+		{
+			name: "encrypt long body",
+			body: strings.Repeat(`{"test": "data"}`, 1024*1024),
 		},
 	}
 
@@ -162,12 +167,6 @@ func TestRSAEncrypt(t *testing.T) {
 
 			middleware := RSAEncrypt(&privateKey.PublicKey)
 			err := middleware(client, request)
-
-			if tt.expectError {
-				assert.Error(t, err)
-				return
-			}
-
 			assert.NoError(t, err)
 
 			// Проверяем, что тело изменилось
@@ -178,8 +177,19 @@ func TestRSAEncrypt(t *testing.T) {
 			// Зашифрованное тело не должно совпадать с исходным
 			assert.NotEqual(t, []byte(tt.body), encryptedBody, "Зашифрованное тело не должно совпадать с исходным")
 
+			//В заголовке появился ключ
+			encryptedAESKeyString := request.Header.Get("AES")
+			assert.NotEmpty(t, encryptedAESKeyString)
+			encryptedAESKey, err := base64.StdEncoding.DecodeString(encryptedAESKeyString)
+			assert.NoError(t, err)
+
 			//Проверяем что после расшифровки получилось исходное сообщение
-			decryptedBody, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, encryptedBody, []byte{})
+			//Расшифровка ключа
+			DecryptedAESKey, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, encryptedAESKey, []byte{})
+			assert.NoError(t, err)
+
+			//Расшифровка тела
+			decryptedBody, err := aes.DecryptGCM(encryptedBody, DecryptedAESKey)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.body, string(decryptedBody))
 		})

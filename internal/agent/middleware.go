@@ -12,6 +12,7 @@ import (
 	"fmt"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/qesterrx/tplmetrics/pkg/aes"
 )
 
 // GzipCompressMiddleware - Middleware процедура обеспечивающая архивацию тела http запроса перед отправкой на сервер
@@ -105,11 +106,25 @@ func RSAEncrypt(PublicKeyRSA *rsa.PublicKey) resty.RequestMiddleware {
 				return nil
 			}
 
-			encryptedBody, err := rsa.EncryptOAEP(sha256.New(), cryptorand.Reader, PublicKeyRSA, srcBody, []byte{})
+			//Получаем случайный набор байт - ключ для AES
+			AESKey, err := aes.GenAESKey()
 			if err != nil {
-				return fmt.Errorf("sender ошибка шифрования RSA %w", err)
+				return fmt.Errorf("sender ошибка получения AES ключа")
 			}
 
+			//Шифруем ключ AES публичным ключем RSA
+			encryptedKey, err := rsa.EncryptOAEP(sha256.New(), cryptorand.Reader, PublicKeyRSA, AESKey, []byte{})
+			if err != nil {
+				return fmt.Errorf("sender ошибка шифрования AES ключа с помощью RSA %w", err)
+			}
+
+			//Шифруем тело через AES
+			encryptedBody, err := aes.EncryptGCM(srcBody, AESKey)
+			if err != nil {
+				return fmt.Errorf("sender ошибка шифрования сообщения с помощью AES %w", err)
+			}
+
+			r.Header.Set("AES", base64.StdEncoding.EncodeToString(encryptedKey))
 			r.SetBody(encryptedBody)
 
 		}
