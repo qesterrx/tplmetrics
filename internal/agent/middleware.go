@@ -8,7 +8,6 @@ import (
 	cryptorand "crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 
@@ -89,7 +88,7 @@ func HMACSignMiddleware(key string) resty.RequestMiddleware {
 }
 
 // RSAEncrypt - Шифрование с помощью RSA тела запроса
-func RSAEncrypt(PublicKeyRSA *x509.Certificate) resty.RequestMiddleware {
+func RSAEncrypt(PublicKeyRSA *rsa.PublicKey) resty.RequestMiddleware {
 
 	return func(c *resty.Client, r *resty.Request) error {
 		if r.Body != nil {
@@ -106,7 +105,7 @@ func RSAEncrypt(PublicKeyRSA *x509.Certificate) resty.RequestMiddleware {
 				return nil
 			}
 
-			encryptedBody, err := rsa.EncryptOAEP(sha256.New(), cryptorand.Reader, PublicKeyRSA.PublicKey.(*rsa.PublicKey), srcBody, []byte{})
+			encryptedBody, err := rsa.EncryptOAEP(sha256.New(), cryptorand.Reader, PublicKeyRSA, srcBody, []byte{})
 			if err != nil {
 				return fmt.Errorf("sender ошибка шифрования RSA %w", err)
 			}

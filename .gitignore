@@ -25,10 +25,17 @@ vendor/
 .idea
 .vscode
 
-#Notes
+# Notes
 notes.txt
 
+# Temp files
 TempFileStorage
+tmp_config.json*
 
-#certificates
+# Certificates
 *.pem
+
+# Config files
+config/*.json
+!config/server.example.json
+!config/agent.example.json

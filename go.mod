@@ -7,13 +7,13 @@ require (
 	github.com/go-chi/chi v1.5.5
 	github.com/go-resty/resty/v2 v2.17.1
 	github.com/golang-migrate/migrate/v4 v4.19.1
-	github.com/golang/mock v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/jessevdk/go-flags v1.6.1
 	github.com/rs/zerolog v1.34.0
 	github.com/shirou/gopsutil/v4 v4.26.2
 	github.com/stretchr/testify v1.11.1
 	github.com/timakin/bodyclose v0.0.0-20260129054331-73d1f95b84b4
+	go.uber.org/mock v0.6.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/tools v0.45.0
 	honnef.co/go/tools v0.7.0

@@ -20,8 +20,6 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 	ticker := time.NewTicker(time.Second * time.Duration(pollInterval))
 	defer ticker.Stop()
 
-	counter := 0
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -62,8 +60,6 @@ func Collector(ctx context.Context, toGroup chan<- model.Metrica, pollInterval i
 
 			toGroup <- model.NewMetricaGauge("RandomValue", float64(rand.ExpFloat64()))
 			toGroup <- model.NewMetricaCounter("PollCount", 1)
-
-			counter++
 
 			logger.Log.Debug().Msg("Collector Метрики собраны")
 		}

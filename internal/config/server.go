@@ -226,7 +226,6 @@ func (cfg *ConfigServer) redefineFromJSON(parser *flags.Parser) error {
 
 			opt = parser.FindOptionByLongName("store-interval")
 			if ((opt == nil) || (opt.IsSetDefault())) && cfgJSON.StoreInterval != nil {
-				fmt.Println("store_interval from json")
 				cfg.StoreInterval = *cfgJSON.StoreInterval
 			}
 

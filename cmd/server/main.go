@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -29,17 +28,15 @@ var buildCommit string
 
 func main() {
 
-	fmt.Println("Build version:", defval.DVR(buildVersion, "N/A"))
-	fmt.Println("Build date:", defval.DVR(buildDate, "N/A"))
-	fmt.Println("Build commit:", defval.DVR(buildCommit, "N/A"))
+	logger.InitLogger()
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
-	// Запускаем HTTP сервер для pprof
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
+	logger.Log.Info().Str("Build version:", defval.DVR(buildVersion, "N/A")).Msg("")
+	logger.Log.Info().Str("Build date:", defval.DVR(buildDate, "N/A")).Msg("")
+	logger.Log.Info().Str("Build commit:", defval.DVR(buildCommit, "N/A")).Msg("")
 
 	if err := run(); err != nil {
-		panic(err)
+		logger.Log.Fatal().Msg(err.Error())
 	}
 }
 
@@ -47,9 +44,6 @@ func run() error {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
 	//Конфигурация
 	cfg, err := config.ParseParamsServer()
@@ -113,10 +107,10 @@ func run() error {
 	// Ждем сигнал завершения
 	select {
 	case <-sigChan:
-		fmt.Println("Получен сигнал остановки приложения")
+		logger.Log.Info().Msg("Получен сигнал остановки приложения")
 		cancel()
 	case <-ctx.Done():
-		fmt.Println("Экстренная остановка приложения")
+		logger.Log.Warn().Msg("Экстренная остановка приложения")
 	}
 
 	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)

@@ -112,15 +112,15 @@ func (ms *MemStorage) Debug(ctx context.Context) {
 	copy(keys, ms.keys)
 	sort.Strings(keys)
 
-	fmt.Println("-------------KEYS-------------")
+	logger.Log.Debug().Msg("-------------KEYS-------------")
 	for _, v := range keys {
-		fmt.Print(v, " ")
+		logger.Log.Debug().Msg(v)
 	}
 
-	fmt.Println("-------------STORAGE-------------")
+	logger.Log.Debug().Msg("-------------STORAGE-------------")
 	for _, key := range keys {
 		mtrk := ms.storage[key]
-		fmt.Printf("%s [%s]: %s \n", mtrk.Name(), mtrk.Kind(), mtrk.Value())
+		logger.Log.Debug().Msg(fmt.Sprintf("%s [%s]: %s \n", mtrk.Name(), mtrk.Kind(), mtrk.Value()))
 	}
 }
 

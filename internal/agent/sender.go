@@ -2,7 +2,7 @@ package agent
 
 import (
 	"context"
-	"crypto/x509"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net/http"
@@ -45,10 +45,7 @@ func checkRetryRequest(err error) bool {
 // В данной процедуре используется resty клиент, и дополнительно заданы middleware функции
 // GzipCompressMiddleware
 // HMACSignMiddleware
-func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string, PublicKeyRSA *x509.Certificate) {
-
-	//??? вот тут с-порно, если бы этот контекст использовался бы Resty то логично, а тут он прокидывается в Retry и по факту используется там только для того чтобы отменить retry
-	//ctxSend := context.WithoutCancel(ctx)
+func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secretKeyForSign string, PublicKeyRSA *rsa.PublicKey) {
 
 	logger.Log.Debug().Msg("Запуск Sender" + strconv.Itoa(num))
 	//Клиента создаем один раз
@@ -56,7 +53,7 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 
 	//Тут определим middleware агента
 	client.OnBeforeRequest(GzipCompressMiddleware) //Сначала зипуем
-	//TODO вообще если не зиповать то выходит ошибка RSA crypto/rsa: message too long for RSA key size
+
 	if PublicKeyRSA != nil {
 		client.OnBeforeRequest(RSAEncrypt(PublicKeyRSA)) //Затем RSA
 	}

@@ -30,7 +30,7 @@ type ConfigAgent struct {
 	SecretKeyForSign string     `short:"k" long:"secret" description:"SecretKeyForSign - key for sign data in header HashSHA256" default:""`
 	CryptoKey        string     `long:"crypto-key" description:"Filename public key for RSA" default:""`
 	Config           string     `short:"c" long:"config" description:"Filename with json config" default:""`
-	PublicKeyRSA     *x509.Certificate
+	PublicKeyRSA     *rsa.PublicKey
 }
 
 // структура для загрузки параметров из JSON
@@ -149,14 +149,12 @@ func (cfg *ConfigAgent) LoadPublicKey() error {
 	}
 
 	//Разборки со слишком длинным сообщением
-	key := cert.PublicKey.(*rsa.PublicKey)
-	bits := key.N.BitLen()
-	bytes := key.N.BitLen() / 8
+	publicKey, ok := cert.PublicKey.(*rsa.PublicKey)
+	if !ok {
+		return fmt.Errorf("Ошибка получения публичного ключа из %s", cfg.CryptoKey)
+	}
 
-	fmt.Printf("Key size: %d bits (%d bytes)\n", bits, bytes)
-	fmt.Printf("Max message size: %d bytes\n", bytes-2*32-2)
-
-	cfg.PublicKeyRSA = cert
+	cfg.PublicKeyRSA = publicKey
 	return nil
 }
 

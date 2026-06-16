@@ -22,22 +22,22 @@ var buildCommit string
 
 func main() {
 
-	fmt.Println("Build version:", defval.DVR(buildVersion, "N/A"))
-	fmt.Println("Build date:", defval.DVR(buildDate, "N/A"))
-	fmt.Println("Build commit:", defval.DVR(buildCommit, "N/A"))
-
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel) //Этот левел для меня )
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+
+	logger.Log.Info().Str("Build version:", defval.DVR(buildVersion, "N/A")).Msg("")
+	logger.Log.Info().Str("Build date:", defval.DVR(buildDate, "N/A")).Msg("")
+	logger.Log.Info().Str("Build commit:", defval.DVR(buildCommit, "N/A")).Msg("")
 
 	config, err := config.ParseParamsAgent()
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal().Msg(err.Error())
 	}
 
 	//Загружаем публичный ключ
 	err = config.LoadPublicKey()
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal().Msg(err.Error())
 	}
 
 	RunAgent(config)

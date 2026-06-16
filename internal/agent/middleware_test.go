@@ -7,7 +7,6 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"io"
 	"testing"
@@ -141,12 +140,6 @@ func TestRSAEncrypt(t *testing.T) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	// Создаем сертификат
-	cert := &x509.Certificate{
-		Raw: make([]byte, 0),
-	}
-	cert.PublicKey = &privateKey.PublicKey
-
 	//Кейсы
 	tests := []struct {
 		name        string
@@ -158,11 +151,6 @@ func TestRSAEncrypt(t *testing.T) {
 			body:        `{"test": "data"}`,
 			expectError: false,
 		},
-		{
-			name:        "encrypt small message",
-			body:        "hello",
-			expectError: false,
-		},
 	}
 
 	for _, tt := range tests {
@@ -172,7 +160,7 @@ func TestRSAEncrypt(t *testing.T) {
 			request := client.R()
 			request.SetBody(tt.body)
 
-			middleware := RSAEncrypt(cert)
+			middleware := RSAEncrypt(&privateKey.PublicKey)
 			err := middleware(client, request)
 
 			if tt.expectError {
@@ -190,8 +178,10 @@ func TestRSAEncrypt(t *testing.T) {
 			// Зашифрованное тело не должно совпадать с исходным
 			assert.NotEqual(t, []byte(tt.body), encryptedBody, "Зашифрованное тело не должно совпадать с исходным")
 
-			//TODO проверить что после расшифровки получилось исходное сообщение
-
+			//Проверяем что после расшифровки получилось исходное сообщение
+			decryptedBody, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, encryptedBody, []byte{})
+			assert.NoError(t, err)
+			assert.Equal(t, tt.body, string(decryptedBody))
 		})
 	}
 }

@@ -26,8 +26,6 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 	for _, file := range pass.Files {
 
-		//fmt.Println(pass.Fset.Position(file.Pos()).Filename)
-
 		// Убираем проверку из .cache т.к. там есть сгенерированные файлы
 		filePath := pass.Fset.Position(file.Pos()).Filename
 		if strings.Contains(filePath, ".cache") {

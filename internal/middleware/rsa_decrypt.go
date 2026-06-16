@@ -30,6 +30,7 @@ func RSADecrypt(privateKeyPem *rsa.PrivateKey) func(http.Handler) http.Handler {
 				decryptedBody, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKeyPem, body, []byte{})
 				if err != nil {
 					w.WriteHeader(http.StatusBadRequest)
+					//return
 				}
 
 				//Восстанавливаем для дальнейшей работы
