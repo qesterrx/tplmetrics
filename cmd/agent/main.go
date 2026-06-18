@@ -5,14 +5,15 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 
 	"github.com/qesterrx/tplmetrics/internal/agent"
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
+	"github.com/qesterrx/tplmetrics/pkg/defval"
 	"github.com/rs/zerolog"
-	"golang.org/x/sync/errgroup"
 )
 
 var buildVersion string
@@ -21,23 +22,22 @@ var buildCommit string
 
 func main() {
 
-	nvl := func(str string) string {
-		if str == "" {
-			return "N/A"
-		}
-		return str
-	}
-
-	fmt.Println("Build version:", nvl(buildVersion))
-	fmt.Println("Build date:", nvl(buildDate))
-	fmt.Println("Build commit:", nvl(buildCommit))
-
 	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel) //Этот левел для меня )
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
+
+	logger.Log.Info().Str("Build version:", defval.DVR(buildVersion, "N/A")).Msg("")
+	logger.Log.Info().Str("Build date:", defval.DVR(buildDate, "N/A")).Msg("")
+	logger.Log.Info().Str("Build commit:", defval.DVR(buildCommit, "N/A")).Msg("")
 
 	config, err := config.ParseParamsAgent()
 	if err != nil {
-		panic(err)
+		logger.Log.Fatal().Msg(err.Error())
+	}
+
+	//Загружаем публичный ключ
+	err = config.LoadPublicKey()
+	if err != nil {
+		logger.Log.Fatal().Msg(err.Error())
 	}
 
 	RunAgent(config)
@@ -49,40 +49,40 @@ func RunAgent(config *config.ConfigAgent) {
 	queueToGroup := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
 	queueToSend := make(chan []byte, config.RateLimit)
 
-	g, ctx := errgroup.WithContext(ctx)
+	wg := sync.WaitGroup{}
 
 	//Сборщик записывает метрики в queueToGroup
-	g.Go(func() error {
+	wg.Go(func() {
 		agent.Collector(ctx, queueToGroup, config.PoolInterval)
-		return nil
 	})
 
 	//Дополнительный сборщик записывает метрики в queueToGroup
-	g.Go(func() error {
+	wg.Go(func() {
 		agent.CollectorAdd(ctx, queueToGroup, config.PoolInterval)
-		return nil
 	})
 
 	//Репортер берет метрики из queueToGroup, группирует, сериализует и пытается отправить
-	g.Go(func() error {
+	wg.Go(func() {
 		agent.Reporter(ctx, queueToGroup, queueToSend, config.ReportInterval)
-		return nil
+		//Надо закрыть канал, чтобы отправщики могли остановиться
+		close(queueToSend)
 	})
 
 	//Пул сендеров занимается отправкой
 	for i := 1; i <= config.RateLimit; i++ {
-		g.Go(func() error {
+		wg.Go(func() {
 			url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
-			agent.Sender(ctx, queueToSend, i, url, config.SecretKeyForSign)
-			return nil
+			agent.Sender(ctx, queueToSend, i, url, config.SecretKeyForSign, config.PublicKeyRSA)
 		})
 	}
 
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	<-sigChan
 	cancel()
+
 	logger.Log.Debug().Msg("Ожидание завершения программы")
+	wg.Wait()
 
 }

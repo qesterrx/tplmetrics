@@ -16,6 +16,8 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/repository"
 )
 
+//go:generate mockgen -source=tcl.go -destination=mocks/mock_storage.gen.go -package=mocks MetricaStorage
+
 // MetricaStorage - Интерфейс описывающий методы для работы с долговременным хранилищем данных
 type MetricaStorage interface {
 
@@ -174,8 +176,14 @@ func (tcl *TCLService) GetAllMetrics(ctx context.Context) []model.Metrica {
 
 // AddUpdateMetricaSubscriber - Добавляет подписчика аудита для уведомления об обновлении метрик
 func (tcl *TCLService) AddUpdateMetricaSubscriber(sub UpdateMetricaSubscriber) {
-	//TODO тут нет проверки на то что такой подписчки уже есть в массиве
 	if sub != nil {
+
+		for _, s := range tcl.subs {
+			if s == sub {
+				return
+			}
+		}
+
 		tcl.subs = append(tcl.subs, sub)
 	}
 }

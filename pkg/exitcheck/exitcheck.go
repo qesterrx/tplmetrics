@@ -1,4 +1,4 @@
-package main
+package exitcheck
 
 import (
 	"go/ast"
@@ -9,8 +9,8 @@ import (
 
 // ExitAnalyzer анализатор для проверки os.Exit в main
 var ExitAnalyzer = &analysis.Analyzer{
-	Name: "errcheck",
-	Doc:  "chec for unchecked error",
+	Name: "exitcheck",
+	Doc:  "checking os.exit in main.main",
 	Run:  run,
 }
 
@@ -26,12 +26,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 	for _, file := range pass.Files {
 
-		//fmt.Println(pass.Fset.Position(file.Pos()).Filename)
-
 		// Убираем проверку из .cache т.к. там есть сгенерированные файлы
 		filePath := pass.Fset.Position(file.Pos()).Filename
 		if strings.Contains(filePath, ".cache") {
-			return nil, nil
+			continue
 		}
 
 		// функцией ast.Inspect проходим по всем узлам AST
@@ -43,6 +41,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				// Ищем функцию main пакета main
 				if funcName == "main" && funcDecl.Recv == nil {
 					checkExitInMain(pass, funcDecl)
+					return false //в файле может быть только одна функция main
 				}
 			}
 			return true
@@ -60,7 +59,7 @@ func checkExitInMain(pass *analysis.Pass, mainFunc *ast.FuncDecl) {
 			if selExpr, ok := exp.Fun.(*ast.SelectorExpr); ok {
 				if ident, ok := selExpr.X.(*ast.Ident); ok {
 					if ident.Name == "os" && selExpr.Sel.Name == "Exit" {
-						pass.Reportf(exp.Fun.Pos(), "os.Exit() вызов обнаружен в main.main")
+						pass.Reportf(exp.Fun.Pos(), "os.Exit() call discover in main.main")
 					}
 				}
 			}

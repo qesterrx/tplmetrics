@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +12,7 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/service"
+	"github.com/qesterrx/tplmetrics/pkg/defval"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 
@@ -28,24 +28,15 @@ var buildCommit string
 
 func main() {
 
-	nvl := func(str string) string {
-		if str == "" {
-			return "N/A"
-		}
-		return str
-	}
+	logger.InitLogger()
+	zerolog.SetGlobalLevel(zerolog.DebugLevel)
 
-	fmt.Println("Build version:", nvl(buildVersion))
-	fmt.Println("Build date:", nvl(buildDate))
-	fmt.Println("Build commit:", nvl(buildCommit))
-
-	// Запускаем HTTP сервер для pprof
-	go func() {
-		http.ListenAndServe("localhost:6060", nil)
-	}()
+	logger.Log.Info().Str("Build version:", defval.DVR(buildVersion, "N/A")).Msg("")
+	logger.Log.Info().Str("Build date:", defval.DVR(buildDate, "N/A")).Msg("")
+	logger.Log.Info().Str("Build commit:", defval.DVR(buildCommit, "N/A")).Msg("")
 
 	if err := run(); err != nil {
-		panic(err)
+		logger.Log.Fatal().Msg(err.Error())
 	}
 }
 
@@ -54,11 +45,15 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	logger.InitLogger()
-	zerolog.SetGlobalLevel(zerolog.DebugLevel)
-
 	//Конфигурация
 	cfg, err := config.ParseParamsServer()
+	if err != nil {
+		logger.Log.Error().Err(err)
+		return err
+	}
+
+	//Загружаем приватный ключ
+	err = cfg.LoadPrivateKey()
 	if err != nil {
 		logger.Log.Error().Err(err)
 		return err
@@ -72,7 +67,7 @@ func run() error {
 	}
 
 	//Объект с хендлерами
-	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign)
+	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign, cfg.PrivateKeyRSA)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -107,11 +102,16 @@ func run() error {
 
 	// Канал для сигналов ОС
 	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 
 	// Ждем сигнал завершения
-	<-sigChan
-	cancel()
+	select {
+	case <-sigChan:
+		logger.Log.Info().Msg("Получен сигнал остановки приложения")
+		cancel()
+	case <-ctx.Done():
+		logger.Log.Warn().Msg("Экстренная остановка приложения")
+	}
 
 	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
@@ -122,6 +122,7 @@ func run() error {
 	}
 
 	logger.Log.Info().Msg("Сервер HttpServer остановлен")
+	g.Wait()
 
 	return nil
 }

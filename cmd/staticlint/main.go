@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/alexkohler/nakedret"
+	"github.com/qesterrx/tplmetrics/pkg/exitcheck"
 	"github.com/timakin/bodyclose/passes/bodyclose"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/multichecker"
@@ -110,7 +111,7 @@ func main() {
 
 	//Свой анализатор на os.Exit в main.main
 	analyzers = append(analyzers,
-		ExitAnalyzer)
+		exitcheck.ExitAnalyzer)
 
 	//
 	multichecker.Main(analyzers...)

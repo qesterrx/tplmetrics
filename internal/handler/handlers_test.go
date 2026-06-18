@@ -17,14 +17,14 @@ import (
 )
 
 // Это надо будет заменить на mock или придумать что то более красивое
-func GetRouterForTest() (*service.TCLService, chi.Router) {
+func GetRouterForTest(t *testing.T) (*service.TCLService, chi.Router) {
 
 	cfg := config.ConfigServer{
 		RestoreFromFileStorage: false,
 		StorageMode:            config.MetricaStorageModeSync,
 	}
 	tcl, _ := service.NewTCLService(&cfg)
-	hc := NewHandlerContainer(tcl, "")
+	hc := NewHandlerContainer(tcl, "", nil)
 
 	return tcl, hc.GetRouter()
 
@@ -32,7 +32,7 @@ func GetRouterForTest() (*service.TCLService, chi.Router) {
 
 func TestGetAllCurrentMetricsHandler(t *testing.T) {
 
-	_, router := GetRouterForTest()
+	_, router := GetRouterForTest(t)
 
 	tests := []struct {
 		name       string
@@ -68,7 +68,7 @@ func TestGetAllCurrentMetricsHandler(t *testing.T) {
 
 func TestGetMetricaHandler(t *testing.T) {
 
-	tcl, router := GetRouterForTest()
+	tcl, router := GetRouterForTest(t)
 	ctx := context.Background()
 
 	tcl.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 5))
@@ -146,7 +146,7 @@ func TestGetMetricaHandler(t *testing.T) {
 
 func TestUpdateMetricaHandler(t *testing.T) {
 
-	_, router := GetRouterForTest()
+	_, router := GetRouterForTest(t)
 
 	tests := []struct {
 		name        string
@@ -200,7 +200,7 @@ func TestUpdateMetricaHandler(t *testing.T) {
 
 func TestUpdateMetricaJSONHandler(t *testing.T) {
 
-	_, router := GetRouterForTest()
+	_, router := GetRouterForTest(t)
 
 	tests := []struct {
 		name        string
@@ -262,7 +262,7 @@ func TestUpdateMetricaJSONHandler(t *testing.T) {
 
 func TestGetMetricaJSONHandler(t *testing.T) {
 
-	tcl, router := GetRouterForTest()
+	tcl, router := GetRouterForTest(t)
 	ctx := context.Background()
 
 	tcl.UpdateMetrica(ctx, model.NewMetricaCounter("c1", 5))

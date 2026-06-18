@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 
@@ -10,10 +11,32 @@ import (
 func TestParseParamsAgent(t *testing.T) {
 	app := os.Args[0]
 
+	//Создаем временный файл с json настройками
+	jsonConfig := configAgentJSON{
+		ServerHost:       func() *string { s := "localhost:8091"; return &s }(),
+		PoolInterval:     func() *int { i := 11; return &i }(),
+		ReportInterval:   func() *int { i := 12; return &i }(),
+		RateLimit:        func() *int { i := 13; return &i }(),
+		SecretKeyForSign: func() *string { s := "json"; return &s }(),
+		CryptoKey:        func() *string { s := "json"; return &s }(),
+	}
+
+	data, err := json.Marshal(&jsonConfig)
+	assert.NoError(t, err)
+	file, err := os.CreateTemp(".", "tmp_config.json")
+	assert.NoError(t, err)
+	_, err = file.Write(data)
+	assert.NoError(t, err)
+	file.Close()
+
+	// удалить файл после использования
+	defer os.Remove(file.Name())
+
 	tests := []struct {
 		name     string
 		flagset  []string
 		envset   map[string]string
+		jsoncfg  string
 		expected ConfigAgent
 		err      bool //Сокращенный вариант, не стал добавлять сюда все переменные, мне главное проверить ошибки
 	}{
@@ -27,12 +50,44 @@ func TestParseParamsAgent(t *testing.T) {
 				ReportInterval:   10,
 				SecretKeyForSign: "",
 				RateLimit:        1,
+				CryptoKey:        "",
+			},
+			err: false,
+		},
+		{
+			name:    "json flag",
+			flagset: []string{"-c=" + file.Name()},
+			envset:  nil,
+			expected: ConfigAgent{
+				ServerHost:       NetAddress{Host: "localhost", Port: 8091},
+				PoolInterval:     11,
+				ReportInterval:   12,
+				SecretKeyForSign: "json",
+				RateLimit:        13,
+				CryptoKey:        "json",
+				Config:           file.Name(),
+			},
+			err: false,
+		},
+		{
+			name:    "json ENV",
+			flagset: nil,
+			envset: map[string]string{
+				"CONFIG": file.Name()},
+			expected: ConfigAgent{
+				ServerHost:       NetAddress{Host: "localhost", Port: 8091},
+				PoolInterval:     11,
+				ReportInterval:   12,
+				SecretKeyForSign: "json",
+				RateLimit:        13,
+				CryptoKey:        "json",
+				Config:           file.Name(),
 			},
 			err: false,
 		},
 		{
 			name:    "correct flag without ENV",
-			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5"},
+			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5", "--crypto-key=asd"},
 			envset:  nil,
 			expected: ConfigAgent{
 				ServerHost:       NetAddress{Host: "address1", Port: 1},
@@ -40,18 +95,20 @@ func TestParseParamsAgent(t *testing.T) {
 				ReportInterval:   456,
 				SecretKeyForSign: "qwerty",
 				RateLimit:        5,
+				CryptoKey:        "asd",
 			},
 			err: false,
 		},
 		{
 			name:    "correct flag with ENV",
-			flagset: []string{"-a=address1:1", "-p=123", "-r=456"},
+			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5", "--crypto-key=asd"},
 			envset: map[string]string{
 				"ADDRESS":         "address2:2",
 				"POLL_INTERVAL":   "321",
 				"REPORT_INTERVAL": "654",
 				"KEY":             "asdfg",
 				"RATE_LIMIT":      "10",
+				"CRYPTO_KEY":      "dsa",
 			},
 			expected: ConfigAgent{
 				ServerHost:       NetAddress{Host: "address2", Port: 2},
@@ -59,6 +116,7 @@ func TestParseParamsAgent(t *testing.T) {
 				ReportInterval:   654,
 				SecretKeyForSign: "asdfg",
 				RateLimit:        10,
+				CryptoKey:        "dsa",
 			},
 			err: false,
 		},

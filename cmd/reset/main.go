@@ -6,6 +6,7 @@ import (
 	"go/format"
 	"go/parser"
 	"go/token"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,10 +85,9 @@ func processFile(filename string) (string, string, error) {
 							return true
 						}
 
-						//fmt.Println(packageName, fset.Position(n.Pos()), ">>>", typeSpec, "-----", structType)
 						err := createResetMethod(&src, typeSpec.Name.Name, structType.Fields.List)
 						if err != nil {
-							fmt.Printf("Reset generation: error generation reset method for %s (%s): %v", fset.Position(n.Pos()), typeSpec.Name.Name, err)
+							log.Printf("Reset generation: error generation reset method for %s (%s): %v", fset.Position(n.Pos()), typeSpec.Name.Name, err)
 						}
 
 					}
@@ -113,8 +113,6 @@ func createResetMethod(src *strings.Builder, structName string, structFields []*
 	for _, field := range structFields {
 		if len(field.Names) > 0 { //Пустое имя поля это встраивание
 			for _, name := range field.Names {
-
-				//fmt.Println(">>", name, field.Type)
 
 				switch t := field.Type.(type) {
 				case *ast.Ident:
@@ -237,13 +235,8 @@ func main() {
 		formatted, err := format.Source(generated)
 
 		if err != nil {
-			//fmt.Println("--------------------------")
-			//fmt.Println(fileSrc)
-			//fmt.Println("--------------------------")
 			return err
 		}
-
-		//fmt.Println(string(formatted))
 
 		err = os.WriteFile(fileNameReset, formatted, 0644)
 		if err != nil {
@@ -257,6 +250,6 @@ func main() {
 	})
 
 	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+		log.Fatalf("Error: %v\n", err)
 	}
 }

@@ -1,11 +1,9 @@
 package middleware
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,14 +11,10 @@ import (
 
 func TestHMACSignMiddleware(t *testing.T) {
 
-	msg := "A not so long message for response"
 	secret := "!ToPSecretKey31415"
 
-	//Получим ожидаемый результат
-	hash := hmac.New(sha256.New, []byte(secret))
-	hash.Write([]byte(msg))
-	sign := hash.Sum(nil)
-	sign64 := base64.StdEncoding.EncodeToString(sign)
+	res := "A not so long message for response"
+	resSign := calcHash([]byte(res), []byte(secret))
 
 	//Получим middleware
 	middlFunc := HMACSignMiddleware(secret)
@@ -28,21 +22,55 @@ func TestHMACSignMiddleware(t *testing.T) {
 	// Тестовый обработчик
 	handler := middlFunc(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(msg))
+		w.Write([]byte(res))
 	}))
 
-	req := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
+	//Проверяем что сервер умеет подписывать сообщения
+	t.Run("Response", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
 
-	// Выполняем запрос
-	handler.ServeHTTP(w, req)
+		// Выполняем запрос
+		handler.ServeHTTP(w, req)
 
-	res := w.Result()
-	defer res.Body.Close()
+		res := w.Result()
+		defer res.Body.Close()
 
-	assert.Equal(t, http.StatusOK, res.StatusCode)
-	assert.Equal(t, sign64, w.Header().Get("HashSHA256"))
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+		assert.Equal(t, resSign, w.Header().Get("HashSHA256"))
+	})
+
+	req := "A not so long message for request"
+	reqSign := calcHash([]byte(req), []byte(secret))
+
+	//Проверяем что сервер умеет проверять подписанные сообщения
+	t.Run("Request correct sign", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", strings.NewReader(req))
+		req.Header.Set("HashSHA256", reqSign)
+		w := httptest.NewRecorder()
+
+		// Выполняем запрос
+		handler.ServeHTTP(w, req)
+
+		res := w.Result()
+		defer res.Body.Close()
+
+		assert.Equal(t, http.StatusOK, res.StatusCode)
+		assert.Equal(t, resSign, w.Header().Get("HashSHA256"))
+	})
+
+	t.Run("Request incorrect sign", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/", strings.NewReader(req))
+		req.Header.Set("HashSHA256", "ABC")
+		w := httptest.NewRecorder()
+
+		// Выполняем запрос
+		handler.ServeHTTP(w, req)
+
+		res := w.Result()
+		defer res.Body.Close()
+
+		assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+	})
 
 }
-
-//TODO набросок. Тут надо проверять не только ответ от сервера, но и проверку подписи в запросе

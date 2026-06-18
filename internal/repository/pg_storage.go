@@ -11,7 +11,7 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
-	"github.com/qesterrx/tplmetrics/internal/retry"
+	"github.com/qesterrx/tplmetrics/pkg/retry"
 )
 
 // PGStorage - структура, реализующая интерфейс [service.MetricaStorage]
