@@ -67,7 +67,7 @@ func run() error {
 	}
 
 	//Объект с хендлерами
-	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign, cfg.PrivateKeyRSA)
+	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign, cfg.PrivateKeyRSA, cfg.MaskSubnet)
 
 	g, ctx := errgroup.WithContext(ctx)
 

@@ -24,7 +24,7 @@ func GetRouterForTest(t *testing.T) (*service.TCLService, chi.Router) {
 		StorageMode:            config.MetricaStorageModeSync,
 	}
 	tcl, _ := service.NewTCLService(&cfg)
-	hc := NewHandlerContainer(tcl, "", nil)
+	hc := NewHandlerContainer(tcl, "", nil, nil)
 
 	return tcl, hc.GetRouter()
 

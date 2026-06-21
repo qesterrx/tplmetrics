@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"net"
 	"os"
 	"testing"
 
@@ -22,6 +23,7 @@ func TestParseParamsServer(t *testing.T) {
 		AuditFile:              func() *string { s := "json_4"; return &s }(),
 		AuditURL:               func() *string { s := "json_5"; return &s }(),
 		CryptoKey:              func() *string { s := "json_6"; return &s }(),
+		TrustedSubnet:          func() *string { s := "192.168.0.1/24"; return &s }(),
 	}
 
 	data, err := json.Marshal(&jsonConfig)
@@ -56,6 +58,7 @@ func TestParseParamsServer(t *testing.T) {
 				AuditURL:               "",
 				CryptoKey:              "",
 				SecretKeyForSign:       "",
+				TrustedSubnet:          "",
 			},
 			err: false,
 		},
@@ -75,6 +78,7 @@ func TestParseParamsServer(t *testing.T) {
 				CryptoKey:              "json_6",
 				SecretKeyForSign:       "json_3",
 				Config:                 file.Name(),
+				TrustedSubnet:          "192.168.0.1/24",
 			},
 			err: false,
 		},
@@ -95,13 +99,24 @@ func TestParseParamsServer(t *testing.T) {
 				CryptoKey:              "json_6",
 				SecretKeyForSign:       "json_3",
 				Config:                 file.Name(),
+				TrustedSubnet:          "192.168.0.1/24",
 			},
 			err: false,
 		},
 		{
-			name:    "correct flag without ENV",
-			flagset: []string{"-a=address1:1", "-i=301", "-f=TempFileStorage1", "-r", "-d=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "-k=asd", "--audit-file=FILENAME1", "--audit-url=URL1", "--crypto-key=private.pem"},
-			envset:  nil,
+			name: "correct flag without ENV",
+			flagset: []string{"-a=address1:1",
+				"-i=301",
+				"-f=TempFileStorage1",
+				"-r",
+				"-d=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable",
+				"-k=asd",
+				"--audit-file=FILENAME1",
+				"--audit-url=URL1",
+				"--crypto-key=private.pem",
+				"-t=192.168.0.2/24",
+			},
+			envset: nil,
 			expected: ConfigServer{
 				ServerHost:             NetAddress{Host: "address1", Port: 1},
 				StoreInterval:          301,
@@ -113,12 +128,22 @@ func TestParseParamsServer(t *testing.T) {
 				AuditURL:               "URL1",
 				CryptoKey:              "private.pem",
 				SecretKeyForSign:       "asd",
+				TrustedSubnet:          "192.168.0.2/24",
 			},
 			err: false,
 		},
 		{
-			name:    "correct flag with ENV",
-			flagset: []string{"-a=address1:1", "-i=301", "-f=TempFileStorage1", "-d=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable", "-k=asd", "--audit-file=FILENAME1", "--audit-url=URL1", "--crypto-key=private_skip.pem"},
+			name: "correct flag with ENV",
+			flagset: []string{"-a=address1:1",
+				"-i=301",
+				"-f=TempFileStorage1",
+				"-d=postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable",
+				"-k=asd",
+				"--audit-file=FILENAME1",
+				"--audit-url=URL1",
+				"--crypto-key=private_skip.pem",
+				"-t=192.168.0.2/24",
+			},
 			envset: map[string]string{
 				"ADDRESS":           "address2:2",
 				"STORE_INTERVAL":    "302",
@@ -129,6 +154,7 @@ func TestParseParamsServer(t *testing.T) {
 				"AUDIT_URL":         "URL2",
 				"CRYPTO_KEY":        "private.pem",
 				"KEY":               "dsa",
+				"TRUSTED_SUBNET":    "192.168.0.3/24",
 			},
 			expected: ConfigServer{
 				ServerHost:             NetAddress{Host: "address2", Port: 2},
@@ -141,6 +167,7 @@ func TestParseParamsServer(t *testing.T) {
 				AuditURL:               "URL2",
 				CryptoKey:              "private.pem",
 				SecretKeyForSign:       "dsa",
+				TrustedSubnet:          "192.168.0.3/24",
 			},
 			err: false,
 		},
@@ -148,16 +175,26 @@ func TestParseParamsServer(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
+			//Установка аргументов
 			os.Args = append([]string{app}, test.flagset...)
 
+			//Установка переменных
 			if test.envset != nil {
 				for k, v := range test.envset {
 					t.Setenv(k, v)
 				}
 			}
 
+			//Тестовый вызов парсинга параметров
 			config, err := ParseParamsServer()
 
+			//Добавим определение маски
+			if test.expected.TrustedSubnet != "" {
+				_, test.expected.MaskSubnet, err = net.ParseCIDR(test.expected.TrustedSubnet)
+				assert.NoError(t, err)
+			}
+
+			//Проверки
 			if test.err {
 				assert.Error(t, err, os.Args)
 			} else {

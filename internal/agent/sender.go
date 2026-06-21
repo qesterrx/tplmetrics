@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/gookit/goutil/netutil"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/pkg/retry"
 )
@@ -61,6 +62,8 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 		client.OnBeforeRequest(HMACSignMiddleware(secretKeyForSign)) //Затем подписываем
 	}
 
+	ipAgnet := netutil.InternalIPv4()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -69,7 +72,7 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 
 			//Reporter может еще что-то дописывать в канал, ждем закрытия канала
 			for msg := range toSend {
-				err := Send(ctx, client, url, msg)
+				err := Send(ctx, client, url, ipAgnet, msg)
 
 				if err != nil {
 					logger.Log.Error().Msg(err.Error())
@@ -82,7 +85,7 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 			return
 
 		case msg := <-toSend:
-			err := Send(ctx, client, url, msg)
+			err := Send(ctx, client, url, ipAgnet, msg)
 
 			if err != nil {
 				logger.Log.Error().Msg(err.Error())
@@ -95,13 +98,14 @@ func Sender(ctx context.Context, toSend <-chan []byte, num int, url string, secr
 }
 
 // Send - Процедура отвечает за отправку сериализованных данных
-func Send(ctx context.Context, client *resty.Client, url string, body []byte) error {
+func Send(ctx context.Context, client *resty.Client, url string, ip string, body []byte) error {
 
 	//замыкание для вызова в retry.RetryFunc
 	fn := func() error {
 
 		resp, err := client.R().
 			SetHeader("Content-Type", "application/json").
+			SetHeader("X-Real-IP", ip).
 			SetBody(body).
 			Post(url)
 

@@ -31,6 +31,7 @@ notes.txt
 # Temp files
 TempFileStorage
 tmp_config.json*
+tmp_audit.txt*
 
 # Certificates
 *.pem

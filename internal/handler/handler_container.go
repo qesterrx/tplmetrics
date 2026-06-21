@@ -3,6 +3,7 @@ package handler
 
 import (
 	"crypto/rsa"
+	"net"
 
 	"github.com/go-chi/chi"
 	"github.com/qesterrx/tplmetrics/internal/middleware"
@@ -15,15 +16,17 @@ type HandlerContainer struct {
 	tcl              *service.TCLService
 	secretKeyForSign string
 	privateKeyPem    *rsa.PrivateKey
+	maskSubnet       *net.IPNet
 }
 
 // NewHandlerContainer - возвращает новый экземпляр HandlerContainer
-func NewHandlerContainer(tcl *service.TCLService, secretKeyForSign string, privateKeyRSA *rsa.PrivateKey) *HandlerContainer {
+func NewHandlerContainer(tcl *service.TCLService, secretKeyForSign string, privateKeyRSA *rsa.PrivateKey, maskSubnet *net.IPNet) *HandlerContainer {
 
 	hc := HandlerContainer{
 		tcl:              tcl,
 		secretKeyForSign: secretKeyForSign,
 		privateKeyPem:    privateKeyRSA,
+		maskSubnet:       maskSubnet,
 	}
 
 	return &hc
@@ -31,7 +34,7 @@ func NewHandlerContainer(tcl *service.TCLService, secretKeyForSign string, priva
 
 // GetRouter Функция возвращающая роутер запросов который занимается маршрутизацией
 // Дополнительно в роутере прописаны исползуемые Middleware функции
-// IPContext - функция для добавления в контекст переменной ИП адреса клиента
+// IPRequest - функция для проверки добавления в контекст переменной ИП адреса клиента
 // LoggingMiddleware - логгирование запросов
 // HMACSignMiddleware - расшифровка HMAC сообщения от клиента
 // GzipCompressMiddleware - архивирование/разархивирование тела запроса
@@ -39,8 +42,9 @@ func NewHandlerContainer(tcl *service.TCLService, secretKeyForSign string, priva
 func (hc *HandlerContainer) GetRouter() chi.Router {
 	r := chi.NewRouter()
 
-	r.Use(middleware.IPContext)
 	r.Use(middleware.LoggingMiddleware)
+	r.Use(middleware.IPRequest(hc.maskSubnet))
+
 	if hc.secretKeyForSign != "" {
 		r.Use(middleware.HMACSignMiddleware(hc.secretKeyForSign)) //Это важно! подпись вычислялась после сжатия, значит проверять ее надо ДО распаковки
 	}
