@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
 	"strconv"
@@ -34,9 +35,11 @@ const (
 // AuditFile Задает имя файла в который пишется дополнительный аудит по обновлению метрик, задается параметром "audit-file" или переменной окружения AUDIT_FILE
 // AuditURL Задает url в который отправляется POST запрос с дополнительным аудитом по обновлению метрик, задается параметром "audit-url" или переменной окружения AUDIT_URL
 // CryptoKey Задает путь к приватному ключу для расшифровки сообщений от агента
+// TrustedSubnet Маска подсети с которой сервер может принимать соединения в виде бесклассовой адресации (CIDR)
 // StorageMode Выбранный режим сохранения данных, рассчитывается на основе StoreInterval, если StoreInterval передан 0 то синхронный режим, если больше 0 то асинхронный
 // Config Имя JSON файла с параметрами приложения
 // PrivateKeyPem - приватный ключ RSA
+// MaskSubnet - маска подсети из параметра TrustedSubnet
 type ConfigServer struct {
 	ServerHost             NetAddress `short:"a" long:"address" description:"Endpoint for server. Format host:port" default:"localhost:8080"`
 	StoreInterval          int        `short:"i" long:"store-interval" description:"StoreInterval - time in sec after which data would be save in file" default:"300"`
@@ -48,8 +51,10 @@ type ConfigServer struct {
 	AuditURL               string     `long:"audit-url" description:"AuditURL - URL Subscriber on Update metrica event sending data to URL" default:""`
 	CryptoKey              string     `long:"crypto-key" description:"Filename to private key for RSA" default:""`
 	Config                 string     `short:"c" long:"config" description:"Filename with json config" default:""`
+	TrustedSubnet          string     `short:"t" long:"trusted-subnet" description:"Trusted subnet for agent" default:""`
 	StorageMode            MetricaStorageMode
 	PrivateKeyRSA          *rsa.PrivateKey
+	MaskSubnet             *net.IPNet
 }
 
 // структура для загрузки параметров из JSON
@@ -63,6 +68,7 @@ type configServerJSON struct {
 	AuditFile              *string `json:"audit_file,omitempty"`
 	AuditURL               *string `json:"audit_url,omitempty"`
 	CryptoKey              *string `json:"crypto_key,omitempty"`
+	TrustedSubnet          *string `json:"trusted_subnet,omitempty"`
 }
 
 // ParseParamsServer - Процедура создания структуры ConfigServer на основе параметров командной строки и переменных окружения
@@ -142,8 +148,8 @@ func ParseParamsServer() (*ConfigServer, error) {
 		cfg.CryptoKey = envCryptoKey
 	}
 
-	if envConfig, exists := os.LookupEnv("CONFIG"); exists && envConfig != "" {
-		cfg.Config = envConfig
+	if envTrustedSubnet, exists := os.LookupEnv("TRUSTED_SUBNET"); exists && envTrustedSubnet != "" {
+		cfg.TrustedSubnet = envTrustedSubnet
 	}
 
 	//Дополнительные проверки параметров
@@ -154,6 +160,13 @@ func ParseParamsServer() (*ConfigServer, error) {
 			return nil, fmt.Errorf("неверный формат строки подключения к БД PostgreSQL (%s)", cfg.DatabaseDSN)
 		}
 
+	}
+
+	if cfg.TrustedSubnet != "" {
+		_, cfg.MaskSubnet, err = net.ParseCIDR(cfg.TrustedSubnet)
+		if err != nil {
+			return nil, fmt.Errorf("ошибка формата маски подсети [%s]: %w", cfg.TrustedSubnet, err)
+		}
 	}
 
 	//Дополнительная трансляция параметров
@@ -262,6 +275,11 @@ func (cfg *ConfigServer) redefineFromJSON(parser *flags.Parser) error {
 			opt = parser.FindOptionByLongName("crypto-key")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.CryptoKey != nil {
 				cfg.CryptoKey = *cfgJSON.CryptoKey
+			}
+
+			opt = parser.FindOptionByLongName("trusted-subnet")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.TrustedSubnet != nil {
+				cfg.TrustedSubnet = *cfgJSON.TrustedSubnet
 			}
 
 		}
