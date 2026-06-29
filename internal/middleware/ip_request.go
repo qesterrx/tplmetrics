@@ -5,6 +5,11 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 )
 
 // ContextValue тип для внедрения занчений в контекст
@@ -69,5 +74,46 @@ func IPRequest(subnet *net.IPNet) func(http.Handler) http.Handler {
 			h.ServeHTTP(w, r.WithContext(ctx))
 		}
 		return http.HandlerFunc(fn)
+	}
+}
+
+// IPRequestInterceptor - middleware для GRPC
+func IPRequestInterceptor(subnet *net.IPNet) func(context.Context, interface{}, *grpc.UnaryServerInfo, grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+
+		ip := ""
+
+		if subnet != nil {
+			md, ok := metadata.FromIncomingContext(ctx)
+			if !ok {
+				return nil, status.Error(codes.PermissionDenied, "метаданные отсутствуют")
+			}
+
+			auth := md.Get("x-real-ip")
+			if len(auth) == 0 {
+				return nil, status.Error(codes.PermissionDenied, "токен не найден")
+			}
+
+			ip = auth[0]
+
+			netIP := net.ParseIP(ip)
+			if netIP == nil {
+				return nil, status.Error(codes.PermissionDenied, "токен не содержит ip")
+			}
+
+			//Проверка адреса по маске
+			if !subnet.Contains(netIP) {
+				return nil, status.Error(codes.PermissionDenied, "IP не прошел проверку")
+			}
+
+		}
+
+		//Добавляем ИП в контекст для дальнейших нужд
+		ctxN := context.WithValue(ctx, ContextIP, strings.TrimSpace(ip))
+
+		// Вызываем основной обработчик
+		resp, err := handler(ctxN, req)
+
+		return resp, err
 	}
 }

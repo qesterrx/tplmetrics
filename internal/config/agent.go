@@ -13,6 +13,13 @@ import (
 	"github.com/jessevdk/go-flags"
 )
 
+type ProtocolServer string
+
+const (
+	ProtocolServerHTTP ProtocolServer = "HTTP"
+	ProtocolServerGRPC ProtocolServer = "GRPC"
+)
+
 // ConfigAgent структура для хранения конфигурации клиента, содержит следующие поля
 // ServerHost Адрес клиента, задается параметром "a" или переменной окружения ADDRESS
 // PoolInterval Интервал опроса метрик, задается параметром "p" или переменной окружения POLL_INTERVAL
@@ -30,6 +37,7 @@ type ConfigAgent struct {
 	SecretKeyForSign string     `short:"k" long:"secret" description:"SecretKeyForSign - key for sign data in header HashSHA256" default:""`
 	CryptoKey        string     `long:"crypto-key" description:"Filename public key for RSA" default:""`
 	Config           string     `short:"c" long:"config" description:"Filename with json config" default:""`
+	Protocol         string     `long:"protocol" description:"Protocol for send metrics HTTP/GRPC" default:"HTTP"`
 	PublicKeyRSA     *rsa.PublicKey
 }
 
@@ -41,6 +49,7 @@ type configAgentJSON struct {
 	RateLimit        *int    `json:"rate_limit,omitempty"`
 	SecretKeyForSign *string `json:"secret,omitempty"`
 	CryptoKey        *string `json:"crypto_key,omitempty"`
+	Protocol         *string `json:"protocol,omitempty"`
 }
 
 // ParseParamsAgent - Процедура создания структуры ConfigAgent на основе параметров командной строки и переменных окружения
@@ -111,6 +120,10 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 		cfg.CryptoKey = envCryptoKey
 	}
 
+	if envProtocol, exists := os.LookupEnv("PROTOCOL"); exists && envProtocol != "" {
+		cfg.Protocol = envProtocol
+	}
+
 	//Дополнительные проверки параметров
 	if cfg.PoolInterval < 1 {
 		return nil, fmt.Errorf("PoolInterval can't be less 1, got %d, check flag -p and ENV $POLL_INTERVAL", cfg.PoolInterval)
@@ -122,6 +135,10 @@ func ParseParamsAgent() (*ConfigAgent, error) {
 
 	if cfg.RateLimit < 1 {
 		return nil, fmt.Errorf("RateLimit can't be less 1, got %d, check flag -p and ENV $RATE_LIMIT", cfg.RateLimit)
+	}
+
+	if cfg.Protocol != string(ProtocolServerHTTP) && cfg.Protocol != string(ProtocolServerGRPC) {
+		return nil, fmt.Errorf("Protocol should be HTTP or GRPC, got %s, check flag -protocol and ENV $PROTOCOL", cfg.Protocol)
 	}
 
 	return &cfg, nil
@@ -213,6 +230,11 @@ func (cfg *ConfigAgent) redefineFromJSON(parser *flags.Parser) error {
 			opt = parser.FindOptionByLongName("crypto-key")
 			if (opt == nil || opt.IsSetDefault()) && cfgJSON.CryptoKey != nil {
 				cfg.CryptoKey = *cfgJSON.CryptoKey
+			}
+
+			opt = parser.FindOptionByLongName("protocol")
+			if (opt == nil || opt.IsSetDefault()) && cfgJSON.Protocol != nil {
+				cfg.Protocol = *cfgJSON.Protocol
 			}
 
 		}
