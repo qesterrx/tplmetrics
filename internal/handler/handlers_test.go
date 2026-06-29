@@ -24,7 +24,7 @@ func GetRouterForTest(t *testing.T) (*service.TCLService, chi.Router) {
 		StorageMode:            config.MetricaStorageModeSync,
 	}
 	tcl, _ := service.NewTCLService(&cfg)
-	hc := NewHandlerContainer(tcl, "", nil)
+	hc := NewHandlerContainer(tcl, "", nil, nil)
 
 	return tcl, hc.GetRouter()
 
@@ -242,6 +242,14 @@ func TestUpdateMetricaJSONHandler(t *testing.T) {
 			contentType: "text/plain",
 			statusCode:  http.StatusBadRequest,
 		},
+		{
+			name:        "EmptyContentType",
+			url:         "/update/",
+			metricaJSON: `{"id":"c1","type":"counter","delta":1}`,
+			method:      http.MethodPost,
+			contentType: "",
+			statusCode:  http.StatusBadRequest,
+		},
 	}
 
 	for _, test := range tests {
@@ -318,6 +326,13 @@ func TestGetMetricaJSONHandler(t *testing.T) {
 			method:     http.MethodGet,
 			statusCode: http.StatusMethodNotAllowed,
 		},
+		{
+			name:       "Wrong deserialization",
+			url:        "/value/",
+			req:        `no json`,
+			method:     http.MethodPost,
+			statusCode: http.StatusBadRequest,
+		},
 	}
 
 	for _, test := range tests {
@@ -344,5 +359,172 @@ func TestGetMetricaJSONHandler(t *testing.T) {
 			}
 		})
 
+	}
+}
+
+func TestPingDBHandler(t *testing.T) {
+	_, router := GetRouterForTest(t)
+
+	tests := []struct {
+		name       string
+		method     string
+		statusCode int
+	}{
+		{
+			name:       "Correct method",
+			method:     http.MethodGet,
+			statusCode: http.StatusOK,
+		},
+		{
+			name:       "Wrong method",
+			method:     http.MethodPost,
+			statusCode: http.StatusMethodNotAllowed,
+		},
+		{
+			name:       "Wrong method PUT",
+			method:     http.MethodPut,
+			statusCode: http.StatusMethodNotAllowed,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(test.method, "/ping", nil)
+
+			router.ServeHTTP(w, r)
+
+			assert.Equal(t, test.statusCode, w.Code)
+		})
+	}
+}
+
+func TestUpdateMetricsJSONHandler(t *testing.T) {
+	_, router := GetRouterForTest(t)
+
+	tests := []struct {
+		name        string
+		url         string
+		metricsJSON string
+		method      string
+		contentType string
+		statusCode  int
+	}{
+		{
+			name: "Update multiple metrics",
+			url:  "/updates/",
+			metricsJSON: `[
+				{"id":"c1","type":"counter","delta":10},
+				{"id":"g1","type":"gauge","value":15.5},
+				{"id":"c2","type":"counter","delta":5}
+			]`,
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusOK,
+		},
+		{
+			name: "Update single metric in batch",
+			url:  "/updates/",
+			metricsJSON: `[
+				{"id":"c1","type":"counter","delta":1}
+			]`,
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusOK,
+		},
+		{
+			name:        "Empty batch",
+			url:         "/updates/",
+			metricsJSON: `[]`,
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusOK,
+		},
+		{
+			name: "Invalid JSON",
+			url:  "/updates/",
+			metricsJSON: `[
+				{"id":"c1","type":"counter","delta":10},
+				{"id":"g1","type":"gauge","value":15.5},
+			]`, // Трейлинг запятая - невалидный JSON
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusBadRequest,
+		},
+		{
+			name:        "Wrong method",
+			url:         "/updates/",
+			metricsJSON: `[{"id":"c1","type":"counter","delta":1}]`,
+			method:      http.MethodGet,
+			contentType: "application/json",
+			statusCode:  http.StatusMethodNotAllowed,
+		},
+		{
+			name:        "Wrong content type",
+			url:         "/updates/",
+			metricsJSON: `[{"id":"c1","type":"counter","delta":1}]`,
+			method:      http.MethodPost,
+			contentType: "text/plain",
+			statusCode:  http.StatusBadRequest,
+		},
+		{
+			name:        "Empty body",
+			url:         "/updates/",
+			metricsJSON: "",
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusBadRequest,
+		},
+		{
+			name: "Invalid metric type",
+			url:  "/updates/",
+			metricsJSON: `[
+				{"id":"c1","type":"invalid","delta":10}
+			]`,
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusBadRequest,
+		},
+		{
+			name: "Missing required field",
+			url:  "/updates/",
+			metricsJSON: `[
+				{"id":"c1","type":"counter"}
+			]`,
+			method:      http.MethodPost,
+			contentType: "application/json",
+			statusCode:  http.StatusBadRequest,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			var body io.Reader
+			if test.metricsJSON != "" {
+				body = strings.NewReader(test.metricsJSON)
+			} else {
+				body = nil
+			}
+			r := httptest.NewRequest(test.method, test.url, body)
+			if test.contentType != "" {
+				r.Header.Set("Content-Type", test.contentType)
+			}
+
+			router.ServeHTTP(w, r)
+
+			assert.Equal(t, test.statusCode, w.Code)
+
+			if test.statusCode == http.StatusOK {
+				assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+
+				resp := w.Result()
+				defer resp.Body.Close()
+
+				bodyBytes, err := io.ReadAll(resp.Body)
+				assert.NoError(t, err)
+				assert.Equal(t, "{}", string(bodyBytes))
+			}
+		})
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,10 +12,13 @@ import (
 	"github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/handler"
 	"github.com/qesterrx/tplmetrics/internal/logger"
+	"github.com/qesterrx/tplmetrics/internal/middleware"
+	"github.com/qesterrx/tplmetrics/internal/proto"
 	"github.com/qesterrx/tplmetrics/internal/service"
 	"github.com/qesterrx/tplmetrics/pkg/defval"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -67,7 +71,7 @@ func run() error {
 	}
 
 	//Объект с хендлерами
-	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign, cfg.PrivateKeyRSA)
+	hc := handler.NewHandlerContainer(tcl, cfg.SecretKeyForSign, cfg.PrivateKeyRSA, cfg.MaskSubnet)
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -81,6 +85,7 @@ func run() error {
 		})
 	}
 
+	//HTTP сервер
 	server := &http.Server{
 		Addr:         cfg.ServerHost.String(),
 		Handler:      hc.GetRouter(),
@@ -100,6 +105,26 @@ func run() error {
 		return nil
 	})
 
+	// Создаем gRPC сервер и регистрируем сервис
+	GRPCS := grpc.NewServer(grpc.ChainUnaryInterceptor(middleware.LoggingInterceptor, middleware.IPRequestInterceptor(cfg.MaskSubnet)))
+	proto.RegisterMetricsServer(GRPCS, handler.NewGRPCContainer(tcl))
+
+	g.Go(func() error {
+		logger.Log.Debug().Msg("Запуск GRPCServer")
+		listen, err := net.Listen("tcp", ":3200")
+		if err != nil {
+			return err
+		}
+		err = GRPCS.Serve(listen)
+		if ctx.Err() == nil {
+			//Ошибку отображаем только если контекст не завершен
+			logger.Log.Error().Msg("Ошибка в работе GRPC сервера:" + err.Error())
+			return err
+		}
+
+		return nil
+	})
+
 	// Канал для сигналов ОС
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
@@ -113,13 +138,22 @@ func run() error {
 		logger.Log.Warn().Msg("Экстренная остановка приложения")
 	}
 
+	// Пытаемся остановить GRPC сервер gracefully
+	go func() {
+		GRPCS.GracefulStop()
+		logger.Log.Info().Msg("GRPC сервер остановлен")
+	}()
+
 	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancelShutdown()
 
-	// Пытаемся остановить сервер gracefully
+	// Пытаемся остановить HTTP сервер gracefully
 	if err := server.Shutdown(ctxShutdown); err != nil {
 		logger.Log.Error().Msg("Ошибка остановки работы сервера:" + err.Error())
 	}
+
+	//HTTP остановился, GRPC останавливаем жестоко
+	GRPCS.Stop()
 
 	logger.Log.Info().Msg("Сервер HttpServer остановлен")
 	g.Wait()

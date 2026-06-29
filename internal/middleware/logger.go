@@ -3,10 +3,12 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"time"
 
 	"github.com/qesterrx/tplmetrics/internal/logger"
+	"google.golang.org/grpc"
 )
 
 // Middleware
@@ -58,4 +60,29 @@ func LoggingMiddleware(h http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(loggedHandler)
+}
+
+// IPRequestInterceptor - middleware для GRPC
+func LoggingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	start := time.Now()
+
+	// Вызываем основной обработчик
+	resp, err := handler(ctx, req)
+
+	// Логируем результат
+	duration := time.Since(start)
+
+	result := "OK"
+	if err != nil {
+		result = err.Error()
+	}
+
+	logger.Log.Info().
+		Str("RPC", info.FullMethod).
+		Str("method", "GRPC").
+		Str("duration", duration.String()).
+		Str("result", result).
+		Send()
+
+	return resp, err
 }

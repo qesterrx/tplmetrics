@@ -19,6 +19,7 @@ func TestParseParamsAgent(t *testing.T) {
 		RateLimit:        func() *int { i := 13; return &i }(),
 		SecretKeyForSign: func() *string { s := "json"; return &s }(),
 		CryptoKey:        func() *string { s := "json"; return &s }(),
+		Protocol:         func() *string { s := "GRPC"; return &s }(),
 	}
 
 	data, err := json.Marshal(&jsonConfig)
@@ -51,6 +52,7 @@ func TestParseParamsAgent(t *testing.T) {
 				SecretKeyForSign: "",
 				RateLimit:        1,
 				CryptoKey:        "",
+				Protocol:         string(ProtocolServerHTTP),
 			},
 			err: false,
 		},
@@ -66,6 +68,7 @@ func TestParseParamsAgent(t *testing.T) {
 				RateLimit:        13,
 				CryptoKey:        "json",
 				Config:           file.Name(),
+				Protocol:         string(ProtocolServerGRPC),
 			},
 			err: false,
 		},
@@ -82,12 +85,13 @@ func TestParseParamsAgent(t *testing.T) {
 				RateLimit:        13,
 				CryptoKey:        "json",
 				Config:           file.Name(),
+				Protocol:         string(ProtocolServerGRPC),
 			},
 			err: false,
 		},
 		{
 			name:    "correct flag without ENV",
-			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5", "--crypto-key=asd"},
+			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5", "--crypto-key=asd", "--protocol=" + string(ProtocolServerGRPC)},
 			envset:  nil,
 			expected: ConfigAgent{
 				ServerHost:       NetAddress{Host: "address1", Port: 1},
@@ -96,12 +100,13 @@ func TestParseParamsAgent(t *testing.T) {
 				SecretKeyForSign: "qwerty",
 				RateLimit:        5,
 				CryptoKey:        "asd",
+				Protocol:         string(ProtocolServerGRPC),
 			},
 			err: false,
 		},
 		{
 			name:    "correct flag with ENV",
-			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5", "--crypto-key=asd"},
+			flagset: []string{"-a=address1:1", "-p=123", "-r=456", "-k=qwerty", "-l=5", "--crypto-key=asd", "--protocol=" + string(ProtocolServerHTTP)},
 			envset: map[string]string{
 				"ADDRESS":         "address2:2",
 				"POLL_INTERVAL":   "321",
@@ -109,6 +114,7 @@ func TestParseParamsAgent(t *testing.T) {
 				"KEY":             "asdfg",
 				"RATE_LIMIT":      "10",
 				"CRYPTO_KEY":      "dsa",
+				"PROTOCOL":        string(ProtocolServerGRPC),
 			},
 			expected: ConfigAgent{
 				ServerHost:       NetAddress{Host: "address2", Port: 2},
@@ -117,6 +123,7 @@ func TestParseParamsAgent(t *testing.T) {
 				SecretKeyForSign: "asdfg",
 				RateLimit:        10,
 				CryptoKey:        "dsa",
+				Protocol:         string(ProtocolServerGRPC),
 			},
 			err: false,
 		},

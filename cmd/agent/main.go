@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	"github.com/qesterrx/tplmetrics/internal/agent"
-	"github.com/qesterrx/tplmetrics/internal/config"
+	cfg "github.com/qesterrx/tplmetrics/internal/config"
 	"github.com/qesterrx/tplmetrics/internal/logger"
 	"github.com/qesterrx/tplmetrics/internal/model"
 	"github.com/qesterrx/tplmetrics/pkg/defval"
@@ -29,7 +29,7 @@ func main() {
 	logger.Log.Info().Str("Build date:", defval.DVR(buildDate, "N/A")).Msg("")
 	logger.Log.Info().Str("Build commit:", defval.DVR(buildCommit, "N/A")).Msg("")
 
-	config, err := config.ParseParamsAgent()
+	config, err := cfg.ParseParamsAgent()
 	if err != nil {
 		logger.Log.Fatal().Msg(err.Error())
 	}
@@ -43,7 +43,7 @@ func main() {
 	RunAgent(config)
 }
 
-func RunAgent(config *config.ConfigAgent) {
+func RunAgent(config *cfg.ConfigAgent) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	queueToGroup := make(chan model.Metrica, 1000) //Количество ~= (reportInterval/pollInterval+1)*Количество метрик
@@ -68,12 +68,22 @@ func RunAgent(config *config.ConfigAgent) {
 		close(queueToSend)
 	})
 
-	//Пул сендеров занимается отправкой
-	for i := 1; i <= config.RateLimit; i++ {
+	switch config.Protocol {
+	case string(cfg.ProtocolServerHTTP):
+		//Пул сендеров занимается отправкой
+		for i := 1; i <= config.RateLimit; i++ {
+			wg.Go(func() {
+				url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
+				agent.Sender(ctx, queueToSend, i, url, config.SecretKeyForSign, config.PublicKeyRSA)
+			})
+		}
+	case string(cfg.ProtocolServerGRPC):
 		wg.Go(func() {
-			url := fmt.Sprintf("http://%s/updates/", config.ServerHost.String())
-			agent.Sender(ctx, queueToSend, i, url, config.SecretKeyForSign, config.PublicKeyRSA)
+			url := config.ServerHost.String()
+			agent.SenderGRPC(ctx, queueToSend, url)
 		})
+	default:
+		logger.Log.Fatal().Msg("Неизвестный вариант протокола")
 	}
 
 	sigChan := make(chan os.Signal, 1)
